@@ -1,0 +1,9 @@
+{
+  "sprint_duration": 10,
+  "break_duration": 3,
+  "sprint_repeats": 3,
+  "point_price": 1.3,
+  "auto_save_interval": 60,
+  "sound_enabled": true,
+  "auto_goal_adjustment": true
+}
