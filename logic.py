@@ -4,6 +4,7 @@
 import time
 import math
 from typing import Optional, List, Dict, Callable, Any
+from datetime import datetime, timedelta
 
 import keyboard
 
@@ -26,7 +27,7 @@ class TrackerLogic:
         self.points = 0
         self.level = 1
 
-        # Настройки (будут загружены из settings.json)
+        # Настройки
         self.sprint_duration = 15
         self.break_duration = 5
         self.sprint_repeats = 1
@@ -38,6 +39,11 @@ class TrackerLogic:
         # Цель на день
         self.daily_goal = 0
         self.goal_start_date = time.strftime("%Y-%m-%d")
+        self._goal_achieved_notified = False
+
+        # Общая цель
+        self.total_goal = 0
+        self.total_goal_achieved_notified = False
 
         # Сессии и состояние
         self.session_active = False
@@ -55,6 +61,15 @@ class TrackerLogic:
         self.sprint_finished = False
         self._recording = False
 
+        # Флаги для предупреждений
+        self._sprint_warning_sent = False
+        self._break_warning_sent = False
+
+        # Пауза
+        self.paused = False
+        self.pause_start: Optional[float] = None
+        self.paused_accumulated: float = 0.0
+
         # Хоткей
         self._hotkey_registered = False
         self._hotkey_latch = False
@@ -71,6 +86,13 @@ class TrackerLogic:
             "max_speed_per_session": 0.0,
             "max_speed_per_day": 0.0,
         }
+
+        # Реальные заработки
+        self.real_earnings: Dict[str, float] = {}
+
+        # Цели (прогнозы)
+        self.goals: List[Dict] = []
+        self.active_goal_id: Optional[str] = None
 
     # ---------- Ранги ----------
     def get_rank(self) -> str:
@@ -102,13 +124,15 @@ class TrackerLogic:
     def get_session_earnings(self, session: Session) -> float:
         return session.points * self.point_price
 
-    # ---------- Цели ----------
+    # ---------- Цель на день ----------
     def set_daily_goal(self, goal_points: int) -> None:
         self.daily_goal = max(0, goal_points)
         self.goal_start_date = time.strftime("%Y-%m-%d")
+        self._goal_achieved_notified = False
         self.on_update()
 
-    def get_goal_progress(self) -> float:
+    def get_daily_goal_progress(self) -> float:
+        """Прогресс дневной цели (0-1)."""
         if self.daily_goal <= 0:
             return 0.0
         today_pts = self.get_today_points()
@@ -169,7 +193,191 @@ class TrackerLogic:
         if self.goal_start_date != today and self.daily_goal > 0:
             self.daily_goal = 0
             self.goal_start_date = today
+            self._goal_achieved_notified = False
             self.on_update()
+
+    # ---------- Общая цель ----------
+    def set_total_goal(self, goal_points: int) -> None:
+        self.total_goal = max(0, goal_points)
+        self.total_goal_achieved_notified = False
+        self.on_update()
+
+    def get_total_goal_progress(self) -> float:
+        """Прогресс общей цели (0-1)."""
+        if self.total_goal <= 0:
+            return 0.0
+        return min(1.0, self.points / self.total_goal)
+
+    def get_total_goal_remaining(self) -> int:
+        """Сколько осталось до общей цели."""
+        if self.total_goal <= 0:
+            return 0
+        return max(0, self.total_goal - self.points)
+
+    def get_total_goal_time_remaining(self) -> Optional[float]:
+        """Прогноз времени до выполнения общей цели (в днях)."""
+        goal = self.total_goal
+        if goal <= 0:
+            return None
+        remaining = goal - self.points
+        if remaining <= 0:
+            return 0.0
+        
+        days = {}
+        for sess in self.sessions:
+            day = time.strftime("%Y-%m-%d", time.localtime(sess.started_at))
+            days[day] = days.get(day, 0) + sess.points
+        
+        if not days:
+            return None
+        
+        total_points = sum(days.values())
+        days_count = len(days)
+        avg_per_day = total_points / days_count if days_count > 0 else 0
+        
+        if avg_per_day <= 0:
+            return None
+        
+        return remaining / avg_per_day
+
+    # ---------- Активная цель (прогнозы) ----------
+    def add_goal(self, name: str, target_amount: float, target_date: str, 
+                 mode: str, income_source: str) -> str:
+        """Добавить новую цель."""
+        goal_id = str(time.time())
+        goal = {
+            'id': goal_id,
+            'name': name,
+            'target_amount': target_amount,
+            'target_date': target_date,
+            'mode': mode,
+            'income_source': income_source,
+            'created_at': time.time(),
+        }
+        self.goals.append(goal)
+        if self.active_goal_id is None:
+            self.active_goal_id = goal_id
+        self.on_update()
+        return goal_id
+
+    def delete_goal(self, goal_id: str) -> None:
+        """Удалить цель."""
+        self.goals = [g for g in self.goals if g['id'] != goal_id]
+        if self.active_goal_id == goal_id:
+            self.active_goal_id = self.goals[0]['id'] if self.goals else None
+        self.on_update()
+
+    def set_active_goal(self, goal_id: str) -> None:
+        """Установить активную цель."""
+        if any(g['id'] == goal_id for g in self.goals):
+            self.active_goal_id = goal_id
+            self.on_update()
+
+    def get_active_goal(self) -> Optional[Dict]:
+        """Получить активную цель."""
+        for goal in self.goals:
+            if goal['id'] == self.active_goal_id:
+                return goal
+        return None
+
+    def _calculate_goal_stats(self):
+        """Вспомогательный метод для расчёта статистики целей."""
+        daily_data = {}
+        for sess in self.sessions:
+            day = time.strftime("%Y-%m-%d", time.localtime(sess.started_at))
+            if day not in daily_data:
+                daily_data[day] = {'points': 0, 'hours': 0.0}
+            daily_data[day]['points'] += sess.points
+            daily_data[day]['hours'] += get_productive_tab_time(sess.tab_times) / 3600.0
+        
+        if self.session_active and self.session_points > 0:
+            today = time.strftime("%Y-%m-%d")
+            if today not in daily_data:
+                daily_data[today] = {'points': 0, 'hours': 0.0}
+            daily_data[today]['points'] += self.session_points
+        
+        total_real_after_tax = 0.0
+        total_approx = 0.0
+        total_points = 0
+        total_hours = 0.0
+        days_with_data = 0
+        
+        real_earnings = getattr(self, 'real_earnings', {})
+        point_price = self.point_price
+        tax_rate = 0.13
+        
+        for day, data in daily_data.items():
+            real = real_earnings.get(day, 0.0)
+            real_after_tax = real * (1 - tax_rate) if real > 0 else 0.0
+            
+            if real_after_tax > 0 and data['hours'] > 0:
+                total_real_after_tax += real_after_tax
+                total_points += data['points']
+                total_hours += data['hours']
+                days_with_data += 1
+        
+        approx_by_real_days = 0.0
+        for day in real_earnings.keys():
+            if day in daily_data:
+                approx_by_real_days += daily_data[day]['points'] * point_price
+        
+        avg_daily_real = total_real_after_tax / days_with_data if days_with_data > 0 else 0
+        avg_daily_user = (total_points * point_price) / days_with_data if days_with_data > 0 else 0
+        
+        return {
+            'days_with_data': days_with_data,
+            'total_real_after_tax': total_real_after_tax,
+            'total_approx': approx_by_real_days,
+            'total_points': total_points,
+            'total_hours': total_hours,
+            'avg_daily_real': avg_daily_real,
+            'avg_daily_user': avg_daily_user,
+        }
+
+    def get_goal_progress(self, goal: Dict) -> Dict:
+        """Рассчитать прогресс по переданной цели (для активной цели)."""
+        goal_amount = goal['target_amount']
+        
+        stats = self._calculate_goal_stats()
+        
+        if goal['mode'] == 'from_scratch':
+            earned = 0
+            mode_label = "С нуля"
+        elif goal['mode'] == 'from_real':
+            earned = stats['total_real_after_tax']
+            mode_label = "От реального"
+        else:  # from_approx
+            earned = stats['total_approx']
+            mode_label = "От приблизительного"
+        
+        remaining = max(0, goal_amount - earned)
+        progress = min(1.0, earned / goal_amount) if goal_amount > 0 else 0
+        
+        avg_daily = stats['avg_daily_real'] if goal['income_source'] == 'real' else stats['avg_daily_user']
+        
+        try:
+            target_date = datetime.strptime(goal['target_date'], "%Y-%m-%d")
+            today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            days_until = max(1, (target_date - today).days)
+        except:
+            days_until = 30
+        
+        needed_per_day = remaining / days_until if days_until > 0 else 0
+        point_price = self.point_price
+        needed_points_per_day = needed_per_day / point_price if point_price > 0 else 0
+        total_points_needed = remaining / point_price if point_price > 0 else 0
+        
+        return {
+            'remaining': remaining,
+            'progress': progress,
+            'earned': earned,
+            'needed_per_day': needed_per_day,
+            'needed_points_per_day': needed_points_per_day,
+            'total_points_needed': total_points_needed,
+            'days_until': days_until,
+            'mode_label': mode_label,
+            'avg_daily': avg_daily,
+        }
 
     # ---------- Рекорды ----------
     def update_records(self):
@@ -188,7 +396,7 @@ class TrackerLogic:
 
         for sess in self.sessions:
             prod = get_productive_tab_time(sess.tab_times)
-            if prod > 0:
+            if prod > 30:
                 speed = sess.points / (prod / 3600)
                 if speed > self.records["max_speed_per_session"]:
                     self.records["max_speed_per_session"] = speed
@@ -197,14 +405,17 @@ class TrackerLogic:
         for sess in self.sessions:
             day = time.strftime("%Y-%m-%d", time.localtime(sess.started_at))
             prod = get_productive_tab_time(sess.tab_times)
-            if prod > 0:
-                daily_speed[day] = daily_speed.get(day, {"points": 0, "time": 0})
+            if prod > 30:
+                if day not in daily_speed:
+                    daily_speed[day] = {"points": 0, "time": 0}
                 daily_speed[day]["points"] += sess.points
                 daily_speed[day]["time"] += prod
+
         for day, data in daily_speed.items():
-            speed = data["points"] / (data["time"] / 3600) if data["time"] > 0 else 0
-            if speed > self.records["max_speed_per_day"]:
-                self.records["max_speed_per_day"] = speed
+            if data["time"] > 0:
+                speed = data["points"] / (data["time"] / 3600)
+                if speed > self.records["max_speed_per_day"]:
+                    self.records["max_speed_per_day"] = speed
 
     # ---------- Продуктивность по часам ----------
     def get_productivity_by_hour(self) -> Dict[int, Dict]:
@@ -217,59 +428,53 @@ class TrackerLogic:
             hours[start_hour]["productive_seconds"] += get_productive_tab_time(sess.tab_times)
         return hours
 
-    # ---------- Прогноз ----------
-    def get_daily_points_series(self) -> dict:
-        daily = {}
-        for sess in self.sessions:
-            day = time.strftime("%Y-%m-%d", time.localtime(sess.started_at))
-            daily[day] = daily.get(day, 0) + sess.points
-        if self.session_active and self.session_start:
-            today = time.strftime("%Y-%m-%d")
-            daily[today] = daily.get(today, 0) + self.session_points
-        return daily
+    # ---------- Звуки предупреждений ----------
+    def _play_warning_sound(self, pattern: str = "short"):
+        if not self.sound_enabled:
+            return
+        try:
+            import winsound
+            import time
+            if pattern == "short":
+                winsound.Beep(880, 150)
+                time.sleep(0.1)
+                winsound.Beep(880, 150)
+            elif pattern == "long":
+                winsound.Beep(440, 300)
+                time.sleep(0.15)
+                winsound.Beep(660, 300)
+            elif pattern == "sprint_end":
+                winsound.Beep(880, 200)
+                time.sleep(0.1)
+                winsound.Beep(660, 200)
+        except Exception:
+            pass
 
-    def predict_future_points(self, days_ahead: int = 7) -> dict:
-        daily = self.get_daily_points_series()
-        if len(daily) < 2:
-            return {}
+    # ---------- Пауза ----------
+    def toggle_pause(self) -> None:
+        if not self.session_active:
+            return
+        if self.current_phase != "sprint":
+            return
 
-        dates = sorted(daily.keys())
-        values = [daily[d] for d in dates]
+        self.paused = not self.paused
 
-        first_date = time.strptime(dates[0], "%Y-%m-%d")
-        first_ts = time.mktime(first_date)
-        x = []
-        for d in dates:
-            ts = time.mktime(time.strptime(d, "%Y-%m-%d"))
-            x.append((ts - first_ts) / (24 * 3600))
+        if self.paused:
+            self.pause_start = time.time()
+        else:
+            if self.pause_start:
+                self.paused_accumulated += time.time() - self.pause_start
+                self.pause_start = None
 
-        n = len(x)
-        if n < 2:
-            return {}
+        self.on_update()
 
-        sum_x = sum(x)
-        sum_y = sum(values)
-        sum_xy = sum(x[i] * values[i] for i in range(n))
-        sum_x2 = sum(x[i] ** 2 for i in range(n))
-
-        a = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x ** 2) if (n * sum_x2 - sum_x ** 2) != 0 else 0
-        b = (sum_y - a * sum_x) / n
-
-        last_day = dates[-1]
-        last_ts = time.mktime(time.strptime(last_day, "%Y-%m-%d"))
-        last_day_num = (last_ts - first_ts) / (24 * 3600)
-
-        predictions = {}
-        for i in range(1, days_ahead + 1):
-            future_day_num = last_day_num + i
-            predicted = a * future_day_num + b
-            if predicted < 0:
-                predicted = 0
-            future_ts = first_ts + future_day_num * 24 * 3600
-            future_date = time.strftime("%Y-%m-%d", time.localtime(future_ts))
-            predictions[future_date] = round(predicted, 1)
-
-        return predictions
+    def get_effective_phase_time(self) -> float:
+        if not self.session_active or self.current_phase_start is None:
+            return 0.0
+        elapsed = time.time() - self.current_phase_start
+        if self.paused:
+            return elapsed - self.paused_accumulated
+        return elapsed - self.paused_accumulated
 
     # ---------- Сессия ----------
     def start_session(self) -> None:
@@ -284,9 +489,15 @@ class TrackerLogic:
         self._last_tab_poll = now
         self.current_sprint_index = 0
         self.sprint_finished = False
+        self._goal_achieved_notified = False
+        self.total_goal_achieved_notified = False
+        self._sprint_warning_sent = False
+        self._break_warning_sent = False
+        self.paused = False
+        self.pause_start = None
+        self.paused_accumulated = 0.0
 
         self._start_phase("sprint")
-        self.on_beep(660, 80)
         self.on_update()
 
     def stop_session(self) -> None:
@@ -312,8 +523,12 @@ class TrackerLogic:
         self.sprint_finished = False
         self.current_sprint_index = 0
         self._recording = False
+        self._sprint_warning_sent = False
+        self._break_warning_sent = False
+        self.paused = False
+        self.pause_start = None
+        self.paused_accumulated = 0.0
 
-        self.on_beep(440, 100)
         self.on_update()
 
     # ---------- Спринты ----------
@@ -323,20 +538,37 @@ class TrackerLogic:
         self.current_phase = phase
         self.current_phase_start = time.time()
         self._recording = (phase == "sprint")
+        self._sprint_warning_sent = False
+        self._break_warning_sent = False
+        self.paused = False
+        self.pause_start = None
+        self.paused_accumulated = 0.0
 
         if phase == "sprint":
-            self.on_beep(880, 100)
+            self._play_warning_sound("short")
         else:
-            self.on_beep(440, 150)
+            self._play_warning_sound("long")
         self.on_update()
 
     def _check_phase_complete(self) -> None:
         if not self.session_active or self.current_phase_start is None:
             return
-        elapsed = time.time() - self.current_phase_start
+
+        elapsed = self.get_effective_phase_time()
+
         if self.current_phase == "sprint":
             duration = self.sprint_duration * 60
+            remaining = duration - elapsed
+
+            if remaining <= 10 and remaining > 0 and not self._sprint_warning_sent:
+                self._sprint_warning_sent = True
+                self._play_warning_sound("short")
+
+            if remaining > 10:
+                self._sprint_warning_sent = False
+
             if elapsed >= duration:
+                self._sprint_warning_sent = False
                 if self.current_sprint_index < self.sprint_repeats - 1:
                     self.current_sprint_index += 1
                     self._start_phase("break")
@@ -345,23 +577,36 @@ class TrackerLogic:
                     self.current_phase = "idle"
                     self.current_phase_start = None
                     self._recording = False
-                    self.on_beep(600, 200)
+                    self._play_warning_sound("sprint_end")
                     self.on_update()
-        else:  # break
+        else:
             duration = self.break_duration * 60
+            remaining = duration - elapsed
+
+            if remaining <= 5 and remaining > 0 and not self._break_warning_sent:
+                self._break_warning_sent = True
+                self._play_warning_sound("long")
+
+            if remaining > 5:
+                self._break_warning_sent = False
+
             if elapsed >= duration:
+                self._break_warning_sent = False
                 self._start_phase("sprint")
 
     def _update_phase_progress(self) -> tuple[Optional[str], float, float]:
         if not self.session_active or self.current_phase_start is None:
             return None, 0.0, 0.0
-        elapsed = time.time() - self.current_phase_start
+
+        elapsed = self.get_effective_phase_time()
+
         if self.current_phase == "sprint":
             total = self.sprint_duration * 60
         elif self.current_phase == "break":
             total = self.break_duration * 60
         else:
             return None, 0.0, 0.0
+
         remaining = max(0.0, total - elapsed)
         progress = elapsed / total if total > 0 else 0
         return self.current_phase, remaining, min(progress, 1.0)
@@ -369,15 +614,15 @@ class TrackerLogic:
     # ---------- Нажатия ----------
     def on_point(self) -> None:
         if not self.session_active:
-            self.on_beep(300, 80)
+            return
+
+        if self.paused:
             return
 
         if self.current_phase == "break":
-            self.on_beep(200, 100)
             return
 
         if self.current_phase != "sprint" or self.sprint_finished:
-            self.on_beep(300, 80)
             return
 
         self.points += 1
@@ -387,8 +632,18 @@ class TrackerLogic:
         if new_level > self.level:
             self.level = new_level
             self.on_level_up()
-        else:
-            self.on_beep(880, 60)
+
+        # Проверка цели на день
+        if self.daily_goal > 0:
+            progress = self.get_daily_goal_progress()
+            if progress >= 1.0 and not self._goal_achieved_notified:
+                self._goal_achieved_notified = True
+
+        # Проверка общей цели
+        if self.total_goal > 0:
+            progress_total = self.get_total_goal_progress()
+            if progress_total >= 1.0 and not self.total_goal_achieved_notified:
+                self.total_goal_achieved_notified = True
 
         self.on_update()
 
@@ -422,7 +677,6 @@ class TrackerLogic:
         if not self.session_active:
             return 0.0
         productive = get_productive_tab_time(self.tab_times)
-        # Добавляем время текущей вкладки, только если мы в спринте и вкладка продуктивная
         if self._recording and self.current_tab and is_productive_tab(self.current_tab):
             now = time.time()
             elapsed = now - self._last_tab_poll
@@ -476,20 +730,40 @@ class TrackerLogic:
             self._check_phase_complete()
 
         self.on_update()
-        
-    def recalculate_records(self):
-    # Обнуляем все рекорды
-        self.records = {
-            "max_points_per_day": 0,
-            "max_points_per_sprint": 0,
-            "max_speed_per_session": 0.0,
-            "max_speed_per_day": 0.0,
-        }
-        # Пересчитываем заново
-        self.update_records()
 
     def close(self) -> None:
         self._closing = True
         if self.session_active:
             self.stop_session()
         self.unregister_hotkey()
+
+    # ---------- Пересчёт рекордов ----------
+    def recalculate_records(self):
+        self.records = {
+            "max_points_per_day": 0,
+            "max_points_per_sprint": 0,
+            "max_speed_per_session": 0.0,
+            "max_speed_per_day": 0.0,
+        }
+        self.update_records()
+        self.on_update()
+
+    def auto_set_goal(self) -> None:
+        today = time.strftime("%Y-%m-%d")
+        if self.goal_start_date == today and self.daily_goal > 0:
+            return
+
+        last_7_days = {}
+        for sess in self.sessions:
+            day = time.strftime("%Y-%m-%d", time.localtime(sess.started_at))
+            if day != today:
+                last_7_days[day] = last_7_days.get(day, 0) + sess.points
+
+        if len(last_7_days) < 3:
+            new_goal = 100
+        else:
+            avg = sum(last_7_days.values()) / len(last_7_days)
+            new_goal = int(math.ceil(avg * 1.1 / 10) * 10)
+            new_goal = max(50, new_goal)
+
+        self.set_daily_goal(new_goal)

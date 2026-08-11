@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Трекер продуктивности картографа.
+Точка входа.
 """
 import sys
 import time
@@ -30,6 +31,11 @@ def main():
         "max_speed_per_session": 0.0,
         "max_speed_per_day": 0.0,
     })
+    logic.total_goal = data.get("total_goal", 0)
+    logic.total_goal_achieved_notified = data.get("total_goal_achieved_notified", False)
+    logic.real_earnings = data.get("real_earnings", {})
+    logic.goals = data.get("goals", [])
+    logic.active_goal_id = data.get("active_goal_id", None)
 
     # Применяем настройки
     logic.sprint_duration = settings.get("sprint_duration", 15)
@@ -39,10 +45,6 @@ def main():
     logic.auto_save_interval = settings.get("auto_save_interval", 60)
     logic.sound_enabled = settings.get("sound_enabled", True)
     logic.auto_goal_adjustment = settings.get("auto_goal_adjustment", True)
-
-    # Комбо удалено, проверка не нужна
-    # if logic.last_press_time and (time.time() - logic.last_press_time) > logic.combo_timeout:
-    #     logic.combo = 0
 
     gui = TrackerGUI(logic)
     gui.run()
