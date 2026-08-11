@@ -7,9 +7,10 @@ import time
 from datetime import datetime
 from typing import List, Dict, Optional
 
-from models import Session
-from utils import get_productive_tab_time, format_duration
-from storage import save_progress
+from src.core.models import Session
+from src.core.storage import save_progress
+from src.utils.helpers import get_productive_tab_time, format_duration
+
 
 
 class FinanceWindow:

@@ -6,8 +6,10 @@ from tkinter import ttk, messagebox
 from datetime import datetime, timedelta
 import time
 
-from utils import get_productive_tab_time
-from storage import save_progress
+from src.utils.helpers import get_productive_tab_time
+from src.core.storage import save_progress
+from src.gui.manage_goals_window import ManageGoalsWindow  # ← ИСПРАВЛЕНО
+
 
 
 class ForecastWindow:
@@ -541,7 +543,7 @@ class ForecastWindow:
     
     def _manage_goals(self):
         """Открыть окно управления целями."""
-        from manage_goals_window import ManageGoalsWindow
+        from src.gui.manage_goals_window import ManageGoalsWindow  # ← ИСПРАВЛЕНО
         ManageGoalsWindow(self.window, self.logic)
     
     def _save_data(self):

@@ -6,7 +6,7 @@ import ctypes
 from datetime import datetime
 from typing import Optional
 
-from config import PRODUCTIVE_TAB_MARKERS, BROWSER_SUFFIXES
+from src.utils.config import PRODUCTIVE_TAB_MARKERS, BROWSER_SUFFIXES
 
 
 def calc_level(points: int) -> int:

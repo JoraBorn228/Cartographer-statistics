@@ -8,13 +8,16 @@ from datetime import datetime, timedelta
 
 import keyboard
 
-from config import RANKS
-from models import Session
-from utils import (
-    calc_level, get_productive_tab_time,
-    parse_tab_title, get_active_window_title,
-    calc_points_per_hour, is_productive_tab
+from src.core.models import Session
+from src.utils.config import RANKS
+from src.utils.helpers import (
+    calc_level,
+    get_productive_tab_time,
+    parse_tab_title,
+    get_active_window_title,
+    is_productive_tab
 )
+
 
 
 class TrackerLogic:
@@ -79,14 +82,7 @@ class TrackerLogic:
         # Автосохранение
         self.last_auto_save = time.time()
 
-        # Рекорды
-        self.records: Dict[str, Any] = {
-            "max_points_per_day": 0,
-            "max_points_per_sprint": 0,
-            "max_speed_per_session": 0.0,
-            "max_speed_per_day": 0.0,
-        }
-
+        
         # Реальные заработки
         self.real_earnings: Dict[str, float] = {}
 
@@ -379,43 +375,6 @@ class TrackerLogic:
             'avg_daily': avg_daily,
         }
 
-    # ---------- Рекорды ----------
-    def update_records(self):
-        daily = {}
-        for sess in self.sessions:
-            day = time.strftime("%Y-%m-%d", time.localtime(sess.started_at))
-            daily[day] = daily.get(day, 0) + sess.points
-        if daily:
-            max_day = max(daily.values())
-            if max_day > self.records["max_points_per_day"]:
-                self.records["max_points_per_day"] = max_day
-
-        for sess in self.sessions:
-            if sess.points > self.records["max_points_per_sprint"]:
-                self.records["max_points_per_sprint"] = sess.points
-
-        for sess in self.sessions:
-            prod = get_productive_tab_time(sess.tab_times)
-            if prod > 30:
-                speed = sess.points / (prod / 3600)
-                if speed > self.records["max_speed_per_session"]:
-                    self.records["max_speed_per_session"] = speed
-
-        daily_speed = {}
-        for sess in self.sessions:
-            day = time.strftime("%Y-%m-%d", time.localtime(sess.started_at))
-            prod = get_productive_tab_time(sess.tab_times)
-            if prod > 30:
-                if day not in daily_speed:
-                    daily_speed[day] = {"points": 0, "time": 0}
-                daily_speed[day]["points"] += sess.points
-                daily_speed[day]["time"] += prod
-
-        for day, data in daily_speed.items():
-            if data["time"] > 0:
-                speed = data["points"] / (data["time"] / 3600)
-                if speed > self.records["max_speed_per_day"]:
-                    self.records["max_speed_per_day"] = speed
 
     # ---------- Продуктивность по часам ----------
     def get_productivity_by_hour(self) -> Dict[int, Dict]:
@@ -514,7 +473,6 @@ class TrackerLogic:
             tab_times=dict(self.tab_times),
         )
         self.sessions.append(session)
-        self.update_records()
 
         self.session_active = False
         self.session_start = None
@@ -736,17 +694,6 @@ class TrackerLogic:
         if self.session_active:
             self.stop_session()
         self.unregister_hotkey()
-
-    # ---------- Пересчёт рекордов ----------
-    def recalculate_records(self):
-        self.records = {
-            "max_points_per_day": 0,
-            "max_points_per_sprint": 0,
-            "max_speed_per_session": 0.0,
-            "max_speed_per_day": 0.0,
-        }
-        self.update_records()
-        self.on_update()
 
     def auto_set_goal(self) -> None:
         today = time.strftime("%Y-%m-%d")

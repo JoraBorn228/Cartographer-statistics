@@ -8,7 +8,7 @@ WINDOW_W = 440
 WINDOW_H = 520
 
 # --- Файл сохранения ---
-SAVE_FILE = Path(__file__).parent / "progress.json"
+SAVE_FILE = Path(__file__).parent.parent.parent / "data" / "progress.json"
 
 # --- Маркеры для определения продуктивной вкладки ---
 PRODUCTIVE_TAB_MARKERS = ("бекофис", "бэкофис", "backoffice", "яндекс", "yandex")

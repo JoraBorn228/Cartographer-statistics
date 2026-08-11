@@ -6,8 +6,10 @@ import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from models import Session, sessions_from_list, sessions_to_list
-from config import SAVE_FILE
+from src.core.models import Session, sessions_from_list, sessions_to_list
+
+# Путь к файлу с данными теперь в папке data
+SAVE_FILE = Path(__file__).parent.parent.parent / "data" / "progress.json"
 
 
 def save_progress(
@@ -23,7 +25,6 @@ def save_progress(
     tab_times: Dict[str, float],
     daily_goal: int,
     goal_start_date: str,
-    records: Dict[str, Any],
     current_phase: str = "idle",
     current_sprint_index: int = 0,
     sprint_finished: bool = False,
@@ -70,7 +71,6 @@ def save_progress(
         "sessions": sessions_to_list(all_sessions),
         "daily_goal": daily_goal,
         "goal_start_date": goal_start_date,
-        "records": records,
         "active_session": active_session_data,
         "total_goal": total_goal,
         "total_goal_achieved_notified": total_goal_achieved_notified,
@@ -79,6 +79,8 @@ def save_progress(
         "active_goal_id": active_goal_id,
     }
     
+    # Создаём папку data, если её нет
+    SAVE_FILE.parent.mkdir(parents=True, exist_ok=True)
     SAVE_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
@@ -113,13 +115,6 @@ def load_progress() -> Dict[str, Any]:
         data["daily_goal"] = 0
     if "goal_start_date" not in data:
         data["goal_start_date"] = time.strftime("%Y-%m-%d")
-    if "records" not in data:
-        data["records"] = {
-            "max_points_per_day": 0,
-            "max_points_per_sprint": 0,
-            "max_speed_per_session": 0.0,
-            "max_speed_per_day": 0.0,
-        }
     if "active_session" not in data:
         data["active_session"] = None
     if "total_goal" not in data:
@@ -142,7 +137,6 @@ def load_progress() -> Dict[str, Any]:
         "sessions": sessions_from_list(data.get("sessions", [])),
         "daily_goal": int(data.get("daily_goal", 0)),
         "goal_start_date": data.get("goal_start_date", time.strftime("%Y-%m-%d")),
-        "records": data.get("records", {}),
         "active_session": data.get("active_session"),
         "total_goal": int(data.get("total_goal", 0)),
         "total_goal_achieved_notified": data.get("total_goal_achieved_notified", False),

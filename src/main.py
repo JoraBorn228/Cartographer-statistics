@@ -7,12 +7,13 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+# Добавляем путь к src для импортов
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from logic import TrackerLogic
-from gui import TrackerGUI
-from storage import load_progress
-from settings_manager import load_settings
+from src.core.logic import TrackerLogic
+from src.gui.main_window import TrackerGUI
+from src.core.storage import load_progress
+from src.core.settings_manager import load_settings
 
 
 def main():
@@ -25,12 +26,7 @@ def main():
     logic.sessions = data.get("sessions", [])
     logic.daily_goal = data.get("daily_goal", 0)
     logic.goal_start_date = data.get("goal_start_date", time.strftime("%Y-%m-%d"))
-    logic.records = data.get("records", {
-        "max_points_per_day": 0,
-        "max_points_per_sprint": 0,
-        "max_speed_per_session": 0.0,
-        "max_speed_per_day": 0.0,
-    })
+
     logic.total_goal = data.get("total_goal", 0)
     logic.total_goal_achieved_notified = data.get("total_goal_achieved_notified", False)
     logic.real_earnings = data.get("real_earnings", {})

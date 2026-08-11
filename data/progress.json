@@ -460,16 +460,36 @@
   ],
   "daily_goal": 3654,
   "goal_start_date": "2026-08-11",
-  "records": {
-    "max_points_per_day": 2334,
-    "max_points_per_sprint": 1346,
-    "max_speed_per_session": 9844.658816539695,
-    "max_speed_per_day": 9844.658816539695
-  },
   "active_session": null,
   "total_goal": 0,
   "total_goal_achieved_notified": false,
-  "real_earnings": {},
-  "goals": [],
-  "active_goal_id": null
+  "real_earnings": {
+    "2026-08-08": 2242.0,
+    "2026-08-07": 1463.0,
+    "2026-08-06": 2498.0,
+    "2026-08-05": 682.0,
+    "2026-08-04": 4109.0,
+    "2026-08-03": 3219.0
+  },
+  "goals": [
+    {
+      "id": "1786410478.6350517",
+      "name": "Спор",
+      "target_amount": 30000.0,
+      "target_date": "2026-08-15",
+      "mode": "from_approx",
+      "income_source": "user",
+      "created_at": 1786410478.6350517
+    },
+    {
+      "id": "1786410487.3655884",
+      "name": "Спор(Реал)",
+      "target_amount": 30000.0,
+      "target_date": "2026-08-15",
+      "mode": "from_real",
+      "income_source": "real",
+      "created_at": 1786410487.3655884
+    }
+  ],
+  "active_goal_id": "1786410478.6350517"
 }

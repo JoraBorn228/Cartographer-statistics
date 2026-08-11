@@ -8,26 +8,28 @@ import random
 import math
 from typing import Optional, List
 
-from config import (
+from src.core.logic import TrackerLogic
+from src.core.models import Session, Particle
+from src.core.storage import save_progress
+from src.utils.config import (
     WINDOW_W, WINDOW_H, BG, BG_CARD, FG, FG_SECONDARY, ACCENT, ACCENT_DARK,
     LEVEL_COLOR, COMBO_COLOR, BAR_BG, BAR_FG, GOAL_BAR_FG,
     BTN_BG, BTN_ACTIVE, BTN_STOP, BTN_HOVER, BG_FLASH,
     SPRINT_DURATIONS, BREAK_DURATIONS, REPEAT_OPTIONS,
 )
-from models import Particle, Session
-from utils import (
+from src.utils.helpers import (
     format_duration, format_datetime, format_points_per_hour,
     is_productive_tab, get_productive_tab_time,
     calc_points_per_hour, calc_level,
 )
-from charts import ChartsWindow
-from storage import save_progress
-from floating import FloatingWidget
-from settings_window import SettingsWindow
-from stats_window import StatsWindow
-from finance_window import FinanceWindow
-from forecast_window import ForecastWindow
-from manage_goals_window import ManageGoalsWindow
+from src.gui.charts import ChartsWindow
+from src.gui.stats_window import StatsWindow
+from src.gui.finance_window import FinanceWindow
+from src.gui.forecast_window import ForecastWindow
+from src.gui.floating import FloatingWidget
+from src.gui.settings_window import SettingsWindow
+from src.gui.manage_goals_window import ManageGoalsWindow
+
 
 
 class TrackerGUI:
@@ -100,7 +102,6 @@ class TrackerGUI:
             ("⚙️", self.show_settings),
             ("📊", self.show_statistics),
             ("📈", self.show_charts),
-            ("🏆", self.show_records),
             ("🖥", self.toggle_floating),
             ("💰", self.show_finance),
             ("📋", self.show_forecast),
@@ -473,55 +474,6 @@ class TrackerGUI:
 
     def show_charts(self):
         ChartsWindow(self.root, self.logic.sessions, self.logic)
-
-    def show_records(self):
-        self._show_records_window()
-
-    def _show_records_window(self):
-        win = tk.Toplevel(self.root)
-        win.title("🏆 Рекорды")
-        win.geometry("400x320")
-        win.configure(bg=BG)
-        win.attributes("-topmost", True)
-
-        tk.Label(
-            win,
-            text="🏆 Ваши рекорды",
-            font=self.mid_font,
-            fg=ACCENT,
-            bg=BG,
-        ).pack(pady=10)
-
-        records = self.logic.records
-        max_earnings_day = records.get("max_points_per_day", 0) * self.logic.point_price
-        text = (
-            f"📌 Максимум точек за день: {records['max_points_per_day']}\n"
-            f"⚡ Максимум точек за спринт: {records['max_points_per_sprint']}\n"
-            f"🚀 Максимальная скорость (за сессию): {records['max_speed_per_session']:.1f} точ/ч\n"
-            f"💨 Максимальная скорость (за день): {records['max_speed_per_day']:.1f} точ/ч\n"
-            f"💰 Максимум заработка за день: {max_earnings_day:.2f} руб."
-        )
-        tk.Label(
-            win,
-            text=text,
-            font=self.small_font,
-            fg=FG,
-            bg=BG,
-            justify=tk.LEFT,
-        ).pack(padx=20, pady=10)
-
-        tk.Button(
-            win,
-            text="Закрыть",
-            command=win.destroy,
-            bg=BTN_BG,
-            fg=FG,
-            activebackground=ACCENT,
-            relief=tk.FLAT,
-            padx=10,
-            pady=5,
-            cursor="hand2",
-        ).pack(pady=10)
 
     def toggle_floating(self):
         if self.floating_widget and self.floating_widget.window.winfo_exists():

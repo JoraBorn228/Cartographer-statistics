@@ -6,7 +6,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from config import PARTICLE_COLORS
+from src.utils.config import PARTICLE_COLORS
 
 
 class Particle:

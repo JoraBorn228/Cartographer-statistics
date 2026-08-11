@@ -6,16 +6,19 @@ import time
 import tkinter as tk
 from tkinter import ttk
 from typing import List, Dict
+import matplotlib
 import numpy as np
 
-import matplotlib
+import matplotlib.pyplot as plt
+plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'DejaVu Sans', 'Microsoft YaHei', 'SimHei']
+plt.rcParams['axes.unicode_minus'] = False
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 from matplotlib.patches import Patch
 
-from models import Session
-from utils import get_productive_tab_time
+from src.core.models import Session
+from src.utils.helpers import get_productive_tab_time
 
 
 class ChartsWindow:

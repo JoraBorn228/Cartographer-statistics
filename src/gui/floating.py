@@ -5,8 +5,8 @@ import tkinter as tk
 from tkinter import font as tkfont
 import time
 
-from config import BG, FG, ACCENT
-from utils import calc_points_per_hour, get_productive_tab_time
+from src.utils.config import BG, FG, ACCENT
+from src.utils.helpers import calc_points_per_hour, get_productive_tab_time
 
 
 class FloatingWidget:

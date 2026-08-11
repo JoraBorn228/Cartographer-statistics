@@ -5,8 +5,9 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Callable
 
-from config import BG, FG, ACCENT, BTN_BG, BTN_ACTIVE, BAR_BG
-from settings_manager import load_settings, save_settings, DEFAULT_SETTINGS
+from src.utils.config import BG, FG, ACCENT, BTN_BG, BTN_ACTIVE, BAR_BG
+from src.core.settings_manager import load_settings, save_settings, DEFAULT_SETTINGS
+
 
 
 class SettingsWindow:

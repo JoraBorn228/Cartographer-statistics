@@ -7,13 +7,15 @@ import time
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from models import Session
-from utils import (
+from src.core.models import Session
+from src.core.storage import save_progress
+from src.utils.config import BG, FG, ACCENT, BAR_BG, BTN_BG, BTN_STOP
+from src.utils.helpers import (
     format_duration, format_datetime, format_points_per_hour,
     is_productive_tab, get_productive_tab_time,
     calc_points_per_hour, calc_level,
 )
-from config import BG, FG, ACCENT, BAR_BG, BTN_BG, BTN_STOP
+
 
 
 class StatsWindow:
@@ -504,7 +506,7 @@ class StatsWindow:
         self.logic.points = max(0, self.logic.points - removed.points)
         self.logic.level = calc_level(self.logic.points)
 
-        from storage import save_progress
+        from src.core.storage import save_progress
         save_progress(
             self.logic.points,
             self.logic.level,
@@ -517,8 +519,7 @@ class StatsWindow:
             self.logic.session_points,
             self.logic.tab_times,
             self.logic.daily_goal,
-            self.logic.goal_start_date,
-            self.logic.records,
+            self.logic.goal_start_date
         )
 
         self.selected_session = None

@@ -4,7 +4,7 @@
 import json
 from pathlib import Path
 
-SETTINGS_FILE = Path(__file__).parent / "settings.json"
+SETTINGS_FILE = Path(__file__).parent.parent.parent / "data" / "settings.json"
 
 DEFAULT_SETTINGS = {
     "sprint_duration": 15,
@@ -18,6 +18,8 @@ DEFAULT_SETTINGS = {
 
 
 def save_settings(settings: dict):
+    # Создаём папку data, если её нет
+    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     SETTINGS_FILE.write_text(json.dumps(settings, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
