@@ -9,15 +9,16 @@ from datetime import datetime, timedelta
 import keyboard
 
 from src.core.models import Session
+from src.core.profile_manager import ProfileManager
 from src.utils.config import RANKS
 from src.utils.helpers import (
     calc_level,
     get_productive_tab_time,
     parse_tab_title,
     get_active_window_title,
+    calc_points_per_hour,
     is_productive_tab
 )
-
 
 
 class TrackerLogic:
@@ -30,7 +31,7 @@ class TrackerLogic:
         self.points = 0
         self.level = 1
 
-        # Настройки
+        # Настройки (будут переопределены из профиля)
         self.sprint_duration = 15
         self.break_duration = 5
         self.sprint_repeats = 1
@@ -38,6 +39,10 @@ class TrackerLogic:
         self.auto_save_interval = 60
         self.sound_enabled = True
         self.auto_goal_adjustment = True
+
+        # Менеджер профилей
+        self.profile_manager = ProfileManager()
+        self._current_phase_duration = 0  # длительность текущей фазы в секундах
 
         # Цель на день
         self.daily_goal = 0
@@ -82,13 +87,58 @@ class TrackerLogic:
         # Автосохранение
         self.last_auto_save = time.time()
 
-        
         # Реальные заработки
         self.real_earnings: Dict[str, float] = {}
 
         # Цели (прогнозы)
         self.goals: List[Dict] = []
         self.active_goal_id: Optional[str] = None
+
+        # Применяем активный профиль при старте
+        self._apply_profile()
+
+    # ---------- Профили ----------
+    def _apply_profile(self):
+        """Применить активный профиль к настройкам."""
+        profile = self.profile_manager.get_active_profile()
+        if profile and profile.phases:
+            # Берём первую фазу как основную
+            first_phase = profile.phases[0]
+            if first_phase.type == "sprint":
+                self.sprint_duration = first_phase.duration
+            else:
+                self.sprint_duration = 15
+
+            # Ищем первый перерыв
+            for phase in profile.phases:
+                if phase.type == "break":
+                    self.break_duration = phase.duration
+                    break
+            else:
+                self.break_duration = 5
+
+            # Количество повторов = количество спринтов в профиле
+            sprint_count = sum(1 for p in profile.phases if p.type == "sprint")
+            self.sprint_repeats = max(1, sprint_count)
+            return True
+        return False
+
+    def get_phase_duration(self, phase_type: str, index: int) -> int:
+        """Получить длительность фазы из профиля."""
+        profile = self.profile_manager.get_active_profile()
+        if profile and index < len(profile.phases):
+            phase = profile.phases[index]
+            if phase.type == phase_type:
+                return phase.duration * 60  # в секундах
+        # Fallback
+        if phase_type == "sprint":
+            return self.sprint_duration * 60
+        else:
+            return self.break_duration * 60
+
+    def get_profile_phases(self) -> List[Dict]:
+        """Получить список фаз из активного профиля."""
+        return self.profile_manager.get_profile_phases(self.profile_manager.active_profile_id)
 
     # ---------- Ранги ----------
     def get_rank(self) -> str:
@@ -128,7 +178,6 @@ class TrackerLogic:
         self.on_update()
 
     def get_daily_goal_progress(self) -> float:
-        """Прогресс дневной цели (0-1)."""
         if self.daily_goal <= 0:
             return 0.0
         today_pts = self.get_today_points()
@@ -199,19 +248,16 @@ class TrackerLogic:
         self.on_update()
 
     def get_total_goal_progress(self) -> float:
-        """Прогресс общей цели (0-1)."""
         if self.total_goal <= 0:
             return 0.0
         return min(1.0, self.points / self.total_goal)
 
     def get_total_goal_remaining(self) -> int:
-        """Сколько осталось до общей цели."""
         if self.total_goal <= 0:
             return 0
         return max(0, self.total_goal - self.points)
 
     def get_total_goal_time_remaining(self) -> Optional[float]:
-        """Прогноз времени до выполнения общей цели (в днях)."""
         goal = self.total_goal
         if goal <= 0:
             return None
@@ -239,7 +285,6 @@ class TrackerLogic:
     # ---------- Активная цель (прогнозы) ----------
     def add_goal(self, name: str, target_amount: float, target_date: str, 
                  mode: str, income_source: str) -> str:
-        """Добавить новую цель."""
         goal_id = str(time.time())
         goal = {
             'id': goal_id,
@@ -257,27 +302,23 @@ class TrackerLogic:
         return goal_id
 
     def delete_goal(self, goal_id: str) -> None:
-        """Удалить цель."""
         self.goals = [g for g in self.goals if g['id'] != goal_id]
         if self.active_goal_id == goal_id:
             self.active_goal_id = self.goals[0]['id'] if self.goals else None
         self.on_update()
 
     def set_active_goal(self, goal_id: str) -> None:
-        """Установить активную цель."""
         if any(g['id'] == goal_id for g in self.goals):
             self.active_goal_id = goal_id
             self.on_update()
 
     def get_active_goal(self) -> Optional[Dict]:
-        """Получить активную цель."""
         for goal in self.goals:
             if goal['id'] == self.active_goal_id:
                 return goal
         return None
 
     def _calculate_goal_stats(self):
-        """Вспомогательный метод для расчёта статистики целей."""
         daily_data = {}
         for sess in self.sessions:
             day = time.strftime("%Y-%m-%d", time.localtime(sess.started_at))
@@ -331,7 +372,6 @@ class TrackerLogic:
         }
 
     def get_goal_progress(self, goal: Dict) -> Dict:
-        """Рассчитать прогресс по переданной цели (для активной цели)."""
         goal_amount = goal['target_amount']
         
         stats = self._calculate_goal_stats()
@@ -374,18 +414,6 @@ class TrackerLogic:
             'mode_label': mode_label,
             'avg_daily': avg_daily,
         }
-
-
-    # ---------- Продуктивность по часам ----------
-    def get_productivity_by_hour(self) -> Dict[int, Dict]:
-        hours = {}
-        for sess in self.sessions:
-            start_hour = time.localtime(sess.started_at).tm_hour
-            if start_hour not in hours:
-                hours[start_hour] = {"points": 0, "productive_seconds": 0}
-            hours[start_hour]["points"] += sess.points
-            hours[start_hour]["productive_seconds"] += get_productive_tab_time(sess.tab_times)
-        return hours
 
     # ---------- Звуки предупреждений ----------
     def _play_warning_sound(self, pattern: str = "short"):
@@ -439,6 +467,10 @@ class TrackerLogic:
     def start_session(self) -> None:
         if self.session_active:
             return
+        
+        # Применяем профиль перед стартом
+        self._apply_profile()
+        
         now = time.time()
         self.session_active = True
         self.session_start = now
@@ -493,6 +525,7 @@ class TrackerLogic:
     def _start_phase(self, phase: str) -> None:
         if not self.session_active:
             return
+        
         self.current_phase = phase
         self.current_phase_start = time.time()
         self._recording = (phase == "sprint")
@@ -501,6 +534,18 @@ class TrackerLogic:
         self.paused = False
         self.pause_start = None
         self.paused_accumulated = 0.0
+
+        # Получаем длительность из профиля
+        profile = self.profile_manager.get_active_profile()
+        if profile and self.current_sprint_index < len(profile.phases):
+            current_phase_obj = profile.phases[self.current_sprint_index]
+            if current_phase_obj.type == phase:
+                self._current_phase_duration = current_phase_obj.duration * 60
+            else:
+                # Если тип не совпадает, используем стандартные значения
+                self._current_phase_duration = (self.sprint_duration if phase == "sprint" else self.break_duration) * 60
+        else:
+            self._current_phase_duration = (self.sprint_duration if phase == "sprint" else self.break_duration) * 60
 
         if phase == "sprint":
             self._play_warning_sound("short")
@@ -513,11 +558,10 @@ class TrackerLogic:
             return
 
         elapsed = self.get_effective_phase_time()
+        duration = self._current_phase_duration
+        remaining = duration - elapsed
 
         if self.current_phase == "sprint":
-            duration = self.sprint_duration * 60
-            remaining = duration - elapsed
-
             if remaining <= 10 and remaining > 0 and not self._sprint_warning_sent:
                 self._sprint_warning_sent = True
                 self._play_warning_sound("short")
@@ -527,20 +571,22 @@ class TrackerLogic:
 
             if elapsed >= duration:
                 self._sprint_warning_sent = False
-                if self.current_sprint_index < self.sprint_repeats - 1:
+                
+                # Переходим к следующей фазе из профиля
+                profile = self.profile_manager.get_active_profile()
+                if profile and self.current_sprint_index + 1 < len(profile.phases):
                     self.current_sprint_index += 1
-                    self._start_phase("break")
+                    next_phase = profile.phases[self.current_sprint_index]
+                    self._start_phase(next_phase.type)
                 else:
+                    # Если профиль закончился
                     self.sprint_finished = True
                     self.current_phase = "idle"
                     self.current_phase_start = None
                     self._recording = False
                     self._play_warning_sound("sprint_end")
                     self.on_update()
-        else:
-            duration = self.break_duration * 60
-            remaining = duration - elapsed
-
+        else:  # break
             if remaining <= 5 and remaining > 0 and not self._break_warning_sent:
                 self._break_warning_sent = True
                 self._play_warning_sound("long")
@@ -550,20 +596,28 @@ class TrackerLogic:
 
             if elapsed >= duration:
                 self._break_warning_sent = False
-                self._start_phase("sprint")
+                
+                # Переходим к следующей фазе из профиля
+                profile = self.profile_manager.get_active_profile()
+                if profile and self.current_sprint_index + 1 < len(profile.phases):
+                    self.current_sprint_index += 1
+                    next_phase = profile.phases[self.current_sprint_index]
+                    self._start_phase(next_phase.type)
+                else:
+                    # Если профиль закончился
+                    self.sprint_finished = True
+                    self.current_phase = "idle"
+                    self.current_phase_start = None
+                    self._recording = False
+                    self._play_warning_sound("sprint_end")
+                    self.on_update()
 
     def _update_phase_progress(self) -> tuple[Optional[str], float, float]:
         if not self.session_active or self.current_phase_start is None:
             return None, 0.0, 0.0
 
         elapsed = self.get_effective_phase_time()
-
-        if self.current_phase == "sprint":
-            total = self.sprint_duration * 60
-        elif self.current_phase == "break":
-            total = self.break_duration * 60
-        else:
-            return None, 0.0, 0.0
+        total = self._current_phase_duration
 
         remaining = max(0.0, total - elapsed)
         progress = elapsed / total if total > 0 else 0
@@ -591,13 +645,11 @@ class TrackerLogic:
             self.level = new_level
             self.on_level_up()
 
-        # Проверка цели на день
         if self.daily_goal > 0:
             progress = self.get_daily_goal_progress()
             if progress >= 1.0 and not self._goal_achieved_notified:
                 self._goal_achieved_notified = True
 
-        # Проверка общей цели
         if self.total_goal > 0:
             progress_total = self.get_total_goal_progress()
             if progress_total >= 1.0 and not self.total_goal_achieved_notified:
@@ -695,6 +747,7 @@ class TrackerLogic:
             self.stop_session()
         self.unregister_hotkey()
 
+    # ---------- Пересчёт ----------
     def auto_set_goal(self) -> None:
         today = time.strftime("%Y-%m-%d")
         if self.goal_start_date == today and self.daily_goal > 0:

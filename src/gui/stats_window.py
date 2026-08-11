@@ -7,6 +7,11 @@ import time
 from datetime import datetime, timedelta
 from typing import List, Optional
 
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+
 from src.core.models import Session
 from src.core.storage import save_progress
 from src.utils.config import BG, FG, ACCENT, BAR_BG, BTN_BG, BTN_STOP
@@ -17,14 +22,14 @@ from src.utils.helpers import (
 )
 
 
-
 class StatsWindow:
     def __init__(self, parent, logic):
         self.parent = parent
         self.logic = logic
         self.window = tk.Toplevel(parent)
         self.window.title("📊 Статистика сессий")
-        self.window.geometry("900x800")
+        self.window.geometry("1000x850")
+        self.window.minsize(800, 700)
         self.window.configure(bg=BG)
         self.window.attributes("-topmost", True)
         self.window.protocol("WM_DELETE_WINDOW", self.close)
@@ -35,9 +40,10 @@ class StatsWindow:
         self.sort_by = tk.StringVar(value="Дата (новые сначала)")
         self.filtered_sessions: List[Session] = []
         self.card_frames = []
+        self.quick_cards = {}
 
         self._build_ui()
-        self._apply_filter()  # начальный фильтр (всё время)
+        self._apply_filter()
 
     # ---------- Построение интерфейса ----------
     def _build_ui(self):
@@ -45,93 +51,46 @@ class StatsWindow:
         quick_frame = tk.Frame(self.window, bg=BG)
         quick_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
 
-        tk.Label(quick_frame, text="Быстрый выбор:", fg=FG, bg=BG).pack(side=tk.LEFT, padx=(0, 10))
+        tk.Label(quick_frame, text="📅 Период:", fg=FG, bg=BG, font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
 
-        btn_today = tk.Button(
-            quick_frame,
-            text="Сегодня",
-            command=lambda: self._set_quick_date(0),
-            bg=BTN_BG,
-            fg=FG,
-            relief=tk.FLAT,
-            padx=8,
-            pady=2,
-            cursor="hand2"
-        )
-        btn_today.pack(side=tk.LEFT, padx=2)
+        for label, days in [("Сегодня", 0), ("Вчера", 1), ("Неделя", 7), ("Месяц", 30), ("Всё", -1)]:
+            btn = tk.Button(
+                quick_frame,
+                text=label,
+                command=lambda d=days: self._set_quick_date(d),
+                bg=BTN_BG,
+                fg=FG,
+                relief=tk.FLAT,
+                padx=8,
+                pady=2,
+                cursor="hand2",
+                font=("Segoe UI", 8)
+            )
+            btn.pack(side=tk.LEFT, padx=2)
 
-        btn_yesterday = tk.Button(
-            quick_frame,
-            text="Вчера",
-            command=lambda: self._set_quick_date(1),
-            bg=BTN_BG,
-            fg=FG,
-            relief=tk.FLAT,
-            padx=8,
-            pady=2,
-            cursor="hand2"
-        )
-        btn_yesterday.pack(side=tk.LEFT, padx=2)
+        # --- Карточки быстрой статистики ---
+        self._build_quick_cards()
 
-        btn_week = tk.Button(
-            quick_frame,
-            text="Неделя",
-            command=lambda: self._set_quick_date(7),
-            bg=BTN_BG,
-            fg=FG,
-            relief=tk.FLAT,
-            padx=8,
-            pady=2,
-            cursor="hand2"
-        )
-        btn_week.pack(side=tk.LEFT, padx=2)
-
-        btn_month = tk.Button(
-            quick_frame,
-            text="Месяц",
-            command=lambda: self._set_quick_date(30),
-            bg=BTN_BG,
-            fg=FG,
-            relief=tk.FLAT,
-            padx=8,
-            pady=2,
-            cursor="hand2"
-        )
-        btn_month.pack(side=tk.LEFT, padx=2)
-
-        btn_all = tk.Button(
-            quick_frame,
-            text="Всё время",
-            command=self._set_all_time,
-            bg=BTN_BG,
-            fg=FG,
-            relief=tk.FLAT,
-            padx=8,
-            pady=2,
-            cursor="hand2"
-        )
-        btn_all.pack(side=tk.LEFT, padx=2)
-
-        # --- Панель фильтрации (поля ввода даты) ---
+        # --- Панель фильтрации ---
         control_frame = tk.Frame(self.window, bg=BG)
         control_frame.pack(fill=tk.X, padx=10, pady=5)
 
-        tk.Label(control_frame, text="Дата от:", fg=FG, bg=BG).pack(side=tk.LEFT, padx=(0, 2))
-        from_entry = tk.Entry(control_frame, textvariable=self.filter_from, width=12, bg=BAR_BG, fg=FG, insertbackground=FG)
-        from_entry.pack(side=tk.LEFT, padx=(0, 10))
+        tk.Label(control_frame, text="От:", fg=FG, bg=BG).pack(side=tk.LEFT, padx=(0, 2))
+        from_entry = tk.Entry(control_frame, textvariable=self.filter_from, width=10, bg=BAR_BG, fg=FG, insertbackground=FG)
+        from_entry.pack(side=tk.LEFT, padx=(0, 5))
 
-        tk.Label(control_frame, text="до:", fg=FG, bg=BG).pack(side=tk.LEFT, padx=(0, 2))
-        to_entry = tk.Entry(control_frame, textvariable=self.filter_to, width=12, bg=BAR_BG, fg=FG, insertbackground=FG)
-        to_entry.pack(side=tk.LEFT, padx=(0, 10))
+        tk.Label(control_frame, text="До:", fg=FG, bg=BG).pack(side=tk.LEFT, padx=(0, 2))
+        to_entry = tk.Entry(control_frame, textvariable=self.filter_to, width=10, bg=BAR_BG, fg=FG, insertbackground=FG)
+        to_entry.pack(side=tk.LEFT, padx=(0, 5))
 
         tk.Button(
             control_frame,
-            text="Применить фильтр",
+            text="🔄 Применить",
             command=self._apply_filter,
             bg=ACCENT,
             fg=BG,
             relief=tk.FLAT,
-            padx=6,
+            padx=8,
             pady=2,
             cursor="hand2"
         ).pack(side=tk.LEFT, padx=(0, 10))
@@ -140,8 +99,12 @@ class StatsWindow:
         sort_combo = ttk.Combobox(
             control_frame,
             textvariable=self.sort_by,
-            values=["Дата (новые сначала)", "Дата (старые сначала)", "По точкам (↑)", "По точкам (↓)", "По скорости (↑)", "По скорости (↓)"],
-            width=20,
+            values=[
+                "Дата (новые сначала)", "Дата (старые сначала)",
+                "По точкам (↑)", "По точкам (↓)",
+                "По скорости (↑)", "По скорости (↓)"
+            ],
+            width=16,
             state="readonly"
         )
         sort_combo.pack(side=tk.LEFT, padx=(0, 10))
@@ -159,28 +122,27 @@ class StatsWindow:
             cursor="hand2"
         ).pack(side=tk.LEFT)
 
-        # --- Блок агрегированной статистики за выбранный период ---
-        self.stats_frame = tk.Frame(self.window, bg=BG)
-        self.stats_frame.pack(fill=tk.X, padx=10, pady=(5, 10))
-
-        self.stats_label = tk.Label(
-            self.stats_frame,
-            text="",
-            font=("Segoe UI", 10),
-            fg=FG,
-            bg=BG,
-            justify=tk.LEFT,
-            anchor=tk.W
-        )
-        self.stats_label.pack(fill=tk.X)
+        # --- Мини-график ---
+        self._build_mini_chart()
 
         # --- Основная панель: список карточек слева, детали справа ---
         main_pane = tk.Frame(self.window, bg=BG)
         main_pane.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
 
+        # Левая часть - список сессий
         left_frame = tk.Frame(main_pane, bg=BG, width=450)
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
         left_frame.pack_propagate(False)
+
+        # Заголовок списка
+        tk.Label(
+            left_frame,
+            text="📋 Сессии",
+            font=("Segoe UI", 10, "bold"),
+            fg=ACCENT,
+            bg=BG,
+            anchor=tk.W
+        ).pack(fill=tk.X, pady=(0, 5))
 
         canvas = tk.Canvas(left_frame, bg=BG, highlightthickness=0)
         scrollbar = tk.Scrollbar(left_frame, orient=tk.VERTICAL, command=canvas.yview)
@@ -195,23 +157,25 @@ class StatsWindow:
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
+        # Правая часть - детали
         right_frame = tk.Frame(main_pane, bg=BG, width=400)
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
         right_frame.pack_propagate(False)
 
         tk.Label(
             right_frame,
-            text="Детали сессии",
-            font=("Segoe UI", 12, "bold"),
+            text="📄 Детали сессии",
+            font=("Segoe UI", 10, "bold"),
             fg=ACCENT,
-            bg=BG
-        ).pack(pady=(0, 10))
+            bg=BG,
+            anchor=tk.W
+        ).pack(fill=tk.X, pady=(0, 5))
 
         self.detail_text = tk.Text(
             right_frame,
             bg=BAR_BG,
             fg=FG,
-            font=("Segoe UI", 9),
+            font=("Consolas", 9),
             wrap=tk.WORD,
             relief=tk.FLAT,
             padx=10,
@@ -220,9 +184,12 @@ class StatsWindow:
         )
         self.detail_text.pack(fill=tk.BOTH, expand=True)
 
+        btn_frame = tk.Frame(right_frame, bg=BG)
+        btn_frame.pack(fill=tk.X, pady=(10, 0))
+
         self.delete_btn = tk.Button(
-            right_frame,
-            text="🗑 Удалить выбранную сессию",
+            btn_frame,
+            text="🗑 Удалить сессию",
             bg=BTN_STOP,
             fg=FG,
             relief=tk.FLAT,
@@ -232,26 +199,139 @@ class StatsWindow:
             command=self._delete_selected_session,
             state=tk.DISABLED
         )
-        self.delete_btn.pack(pady=(10, 0))
+        self.delete_btn.pack(side=tk.LEFT, padx=2)
+
+        tk.Button(
+            btn_frame,
+            text="📋 Копировать детали",
+            bg=BTN_BG,
+            fg=FG,
+            relief=tk.FLAT,
+            padx=10,
+            pady=5,
+            cursor="hand2",
+            command=self._copy_details
+        ).pack(side=tk.LEFT, padx=2)
+
+    # ---------- Карточки быстрой статистики ----------
+    def _build_quick_cards(self):
+        """Создать карточки быстрой статистики."""
+        cards_frame = tk.Frame(self.window, bg=BG)
+        cards_frame.pack(fill=tk.X, padx=10, pady=(0, 5))
+
+        stats = [
+            ("📌", "Точек", "0", "#00d4aa"),
+            ("⚡", "Скорость", "0 т/ч", "#ffd166"),
+            ("💰", "Заработано", "0 ₽", "#ff6b6b"),
+            ("⏱", "Время", "0:00", "#4ecdc4"),
+            ("📅", "Сессий", "0", "#a29bfe"),
+        ]
+
+        for icon, label, default, color in stats:
+            card = tk.Frame(
+                cards_frame,
+                bg="#1a1a3e",
+                relief=tk.GROOVE,
+                bd=1,
+                padx=8,
+                pady=4
+            )
+            card.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+            header = tk.Frame(card, bg="#1a1a3e")
+            header.pack(fill=tk.X)
+
+            tk.Label(
+                header,
+                text=icon,
+                font=("Segoe UI", 10),
+                fg=color,
+                bg="#1a1a3e"
+            ).pack(side=tk.LEFT)
+
+            tk.Label(
+                header,
+                text=label,
+                font=("Segoe UI", 8),
+                fg="#888",
+                bg="#1a1a3e"
+            ).pack(side=tk.LEFT, padx=(2, 0))
+
+            value = tk.Label(
+                card,
+                text=default,
+                font=("Segoe UI", 12, "bold"),
+                fg=FG,
+                bg="#1a1a3e",
+                anchor=tk.W
+            )
+            value.pack(fill=tk.X, pady=(0, 2))
+
+            key = label.lower()
+            self.quick_cards[key] = value
+
+    # ---------- Мини-график ----------
+    def _build_mini_chart(self):
+        """Создать мини-график точек по дням."""
+        chart_frame = tk.Frame(self.window, bg=BG)
+        chart_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+
+        self.fig = Figure(figsize=(8, 1.5), dpi=80, facecolor="#1a1a3e")
+        self.ax = self.fig.add_subplot(111)
+        self.ax.set_facecolor("#1a1a3e")
+        self.ax.tick_params(colors='#888', labelsize=8)
+        self.ax.grid(True, color='#2a2a40', linestyle='--', alpha=0.3)
+
+        self.canvas = FigureCanvasTkAgg(self.fig, master=chart_frame)
+        self.canvas.get_tk_widget().pack(fill=tk.X, pady=5)
+
+    def _update_mini_chart(self):
+        """Обновить мини-график."""
+        self.ax.clear()
+
+        if not self.filtered_sessions:
+            self.ax.text(0.5, 0.5, "Нет данных", ha='center', va='center', color='#888', fontsize=10)
+            self.ax.set_facecolor("#1a1a3e")
+            self.canvas.draw()
+            return
+
+        # Агрегируем по дням
+        daily = {}
+        for sess in self.filtered_sessions:
+            day = time.strftime("%Y-%m-%d", time.localtime(sess.started_at))
+            daily[day] = daily.get(day, 0) + sess.points
+
+        dates = sorted(daily.keys())[-30:]  # последние 30 дней
+        values = [daily[d] for d in dates]
+
+        if len(dates) > 1:
+            self.ax.plot(range(len(dates)), values, marker='o', color='#00d4aa', linewidth=2, markersize=4)
+            self.ax.fill_between(range(len(dates)), 0, values, alpha=0.2, color='#00d4aa')
+            self.ax.set_xticks(range(len(dates)))
+
+            step = max(1, len(dates) // 8)
+            labels = [d[5:] if i % step == 0 else "" for i, d in enumerate(dates)]
+            self.ax.set_xticklabels(labels, rotation=45, ha='right', color='#888', fontsize=7)
+
+        if values:
+            avg = sum(values) / len(values)
+            self.ax.axhline(y=avg, color='#ff6b6b', linestyle='--', linewidth=1, alpha=0.5)
+
+        self.ax.set_facecolor("#1a1a3e")
+        self.fig.tight_layout()
+        self.canvas.draw()
 
     # ---------- Быстрый выбор даты ----------
     def _set_quick_date(self, days_back: int):
-        """Установить фильтр на последние N дней (0 = сегодня)."""
-        today = datetime.now().date()
-        if days_back == 0:
-            from_date = today
-            to_date = today
+        """Установить фильтр на последние N дней (-1 = всё время)."""
+        if days_back == -1:
+            self.filter_from.set("")
+            self.filter_to.set("")
         else:
+            today = datetime.now().date()
             from_date = today - timedelta(days=days_back)
-            to_date = today
-        self.filter_from.set(from_date.strftime("%Y-%m-%d"))
-        self.filter_to.set(to_date.strftime("%Y-%m-%d"))
-        self._apply_filter()
-
-    def _set_all_time(self):
-        """Сбросить фильтр (всё время)."""
-        self.filter_from.set("")
-        self.filter_to.set("")
+            self.filter_from.set(from_date.strftime("%Y-%m-%d"))
+            self.filter_to.set(today.strftime("%Y-%m-%d"))
         self._apply_filter()
 
     # ---------- Фильтрация и сортировка ----------
@@ -306,8 +386,8 @@ class StatsWindow:
         raw = self._get_sessions()
         self.filtered_sessions = self._sort_sessions(raw)
 
-        # Обновляем агрегированную статистику
         self._update_aggregated_stats()
+        self._update_mini_chart()
 
         # Очищаем старые карточки
         for frame in self.card_frames:
@@ -315,12 +395,13 @@ class StatsWindow:
         self.card_frames.clear()
 
         # Создаём карточки
-        for idx, sess in enumerate(self.filtered_sessions):
-            card = self._create_card(sess, idx)
-            self.card_frames.append(card)
-            card.pack(fill=tk.X, pady=3, padx=5)
+        if self.filtered_sessions:
+            max_points = max(s.points for s in self.filtered_sessions)
+            for idx, sess in enumerate(self.filtered_sessions):
+                card = self._create_card(sess, idx, max_points)
+                self.card_frames.append(card)
+                card.pack(fill=tk.X, pady=2, padx=2)
 
-        # Если есть выбранная, обновляем детали
         if self.selected_session in self.filtered_sessions:
             self._show_details(self.selected_session)
         else:
@@ -331,10 +412,25 @@ class StatsWindow:
         self.scrollable_frame.update_idletasks()
 
     # ---------- Агрегированная статистика ----------
+    def _get_speed_color(self, speed: float) -> str:
+        """Цвет для скорости."""
+        if speed is None:
+            return "#888"
+        if speed >= 300:
+            return "#00d4aa"
+        elif speed >= 200:
+            return "#ffd166"
+        elif speed >= 100:
+            return "#ff9f43"
+        else:
+            return "#ff6b6b"
+
     def _update_aggregated_stats(self):
+        """Обновить карточки быстрой статистики."""
         sessions = self.filtered_sessions
         if not sessions:
-            self.stats_label.config(text="Нет данных за выбранный период")
+            for card in self.quick_cards.values():
+                card.config(text="—")
             return
 
         count = len(sessions)
@@ -344,36 +440,19 @@ class StatsWindow:
         total_earnings = total_points * self.logic.point_price
 
         avg_speed = calc_points_per_hour(total_points, total_productive)
-        avg_speed_str = f"{avg_speed:.1f} точ/ч" if avg_speed is not None else "—"
+        avg_speed_str = f"{avg_speed:.0f} т/ч" if avg_speed is not None else "—"
 
-        avg_per_session = total_points / count if count else 0
-
-        # Определяем текстовое описание периода
-        date_from = self.filter_from.get().strip()
-        date_to = self.filter_to.get().strip()
-        if date_from and date_to:
-            if date_from == date_to:
-                period_label = date_from
-            else:
-                period_label = f"{date_from} — {date_to}"
-        else:
-            period_label = "Всё время"
-
-        text = (
-            f"📅 {period_label}\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"▸ Сессий: {count}\n"
-            f"▸ Всего точек: {total_points}\n"
-            f"▸ Среднее точек за сессию: {avg_per_session:.1f}\n"
-            f"▸ Чистое время в панорамах: {format_duration(total_productive)}\n"
-            f"▸ Общая длительность сессий: {format_duration(total_duration)}\n"
-            f"▸ Средняя скорость: {avg_speed_str}\n"
-            f"▸ Заработано: {total_earnings:.2f} руб."
+        self.quick_cards['точек'].config(text=f"{total_points:,}")
+        self.quick_cards['скорость'].config(
+            text=avg_speed_str,
+            fg=self._get_speed_color(avg_speed) if avg_speed else FG
         )
-        self.stats_label.config(text=text)
+        self.quick_cards['заработано'].config(text=f"{total_earnings:.0f} ₽")
+        self.quick_cards['время'].config(text=format_duration(total_productive))
+        self.quick_cards['сессий'].config(text=str(count))
 
     # ---------- Создание карточки ----------
-    def _create_card(self, session: Session, index: int) -> tk.Frame:
+    def _create_card(self, session: Session, index: int, max_points: int) -> tk.Frame:
         card = tk.Frame(
             self.scrollable_frame,
             bg="#2a2a40",
@@ -382,50 +461,70 @@ class StatsWindow:
             highlightthickness=1,
             highlightcolor="#3d3d6b"
         )
+
+        is_best = session.points == max_points and max_points > 0
+        if is_best:
+            card.configure(bg="#1a3a2e", highlightcolor="#00d4aa")
+
         card.bind("<Button-1>", lambda e, s=session: self._on_card_click(s))
-        card.bind("<Enter>", lambda e, c=card: c.configure(bg="#3d3d6b"))
-        card.bind("<Leave>", lambda e, c=card: c.configure(bg="#2a2a40"))
+        card.bind("<Enter>", lambda e, c=card: c.configure(bg="#3d3d6b" if not is_best else "#1a4a3e"))
+        card.bind("<Leave>", lambda e, c=card: c.configure(bg="#2a2a40" if not is_best else "#1a3a2e"))
 
         start = time.localtime(session.started_at)
         end = time.localtime(session.ended_at)
         prod_secs = get_productive_tab_time(session.tab_times)
-        pph = format_points_per_hour(session.points, prod_secs)
+        speed = calc_points_per_hour(session.points, prod_secs)
+        speed_str = format_points_per_hour(session.points, prod_secs)
         earnings = session.points * self.logic.point_price
         duration = session.duration
 
-        top_frame = tk.Frame(card, bg="#2a2a40")
-        top_frame.pack(fill=tk.X, padx=8, pady=(6, 2))
+        # Верхняя часть карточки
+        top_frame = tk.Frame(card, bg=card.cget('bg'))
+        top_frame.pack(fill=tk.X, padx=8, pady=(4, 2))
 
-        lbl_date = tk.Label(
-            top_frame,
-            text=f"{start.tm_mday:02d}.{start.tm_mon:02d}.{start.tm_year} {start.tm_hour:02d}:{start.tm_min:02d} — {end.tm_hour:02d}:{end.tm_min:02d}",
-            font=("Segoe UI", 10, "bold"),
-            fg=ACCENT,
-            bg="#2a2a40"
-        )
-        lbl_date.pack(side=tk.LEFT)
+        left_frame = tk.Frame(top_frame, bg=card.cget('bg'))
+        left_frame.pack(side=tk.LEFT)
 
-        lbl_points = tk.Label(
-            top_frame,
+        tk.Label(
+            left_frame,
+            text=f"{start.tm_mday:02d}.{start.tm_mon:02d}.{start.tm_year} {start.tm_hour:02d}:{start.tm_min:02d}",
+            font=("Segoe UI", 9, "bold"),
+            fg=ACCENT if not is_best else "#00d4aa",
+            bg=card.cget('bg')
+        ).pack(side=tk.LEFT)
+
+        if is_best:
+            tk.Label(
+                left_frame,
+                text=" ⭐ Рекорд!",
+                font=("Segoe UI", 8, "bold"),
+                fg="#ffd700",
+                bg=card.cget('bg')
+            ).pack(side=tk.LEFT, padx=(5, 0))
+
+        right_frame = tk.Frame(top_frame, bg=card.cget('bg'))
+        right_frame.pack(side=tk.RIGHT)
+
+        speed_color = self._get_speed_color(speed) if speed else "#888"
+        tk.Label(
+            right_frame,
             text=f"{session.points} pts",
             font=("Segoe UI", 10, "bold"),
-            fg=FG,
-            bg="#2a2a40"
-        )
-        lbl_points.pack(side=tk.RIGHT)
+            fg=speed_color,
+            bg=card.cget('bg')
+        ).pack(side=tk.RIGHT, padx=(0, 10))
 
-        bottom_frame = tk.Frame(card, bg="#2a2a40")
-        bottom_frame.pack(fill=tk.X, padx=8, pady=(0, 6))
+        bottom_frame = tk.Frame(card, bg=card.cget('bg'))
+        bottom_frame.pack(fill=tk.X, padx=8, pady=(0, 4))
 
-        info_text = f"⚡ {pph}  |  ⏱ {format_duration(duration)}  |  💰 {earnings:.2f} руб."
-        lbl_info = tk.Label(
+        info_text = f"⚡ {speed_str}  |  ⏱ {format_duration(duration)}  |  💰 {earnings:.0f} ₽"
+        tk.Label(
             bottom_frame,
             text=info_text,
-            font=("Segoe UI", 9),
+            font=("Segoe UI", 8),
             fg="#888",
-            bg="#2a2a40"
-        )
-        lbl_info.pack(side=tk.LEFT)
+            bg=card.cget('bg')
+        ).pack(side=tk.LEFT)
 
         def bind_click(widget):
             widget.bind("<Button-1>", lambda e, s=session: self._on_card_click(s))
@@ -447,38 +546,51 @@ class StatsWindow:
         for idx, sess in enumerate(self.filtered_sessions):
             if sess == session:
                 card = self.card_frames[idx]
-                card.configure(bg="#3d3d6b")
+                is_best = sess.points == max(s.points for s in self.filtered_sessions) if self.filtered_sessions else False
+                card.configure(bg="#1a3a2e" if is_best else "#3d3d6b")
                 for child in card.winfo_children():
-                    child.configure(bg="#3d3d6b")
+                    child.configure(bg="#1a3a2e" if is_best else "#3d3d6b")
                 break
 
     # ---------- Детали ----------
     def _show_details(self, session: Session):
         self.detail_text.delete(1.0, tk.END)
         prod_secs = get_productive_tab_time(session.tab_times)
-        pph = format_points_per_hour(session.points, prod_secs)
+        speed = calc_points_per_hour(session.points, prod_secs)
+        speed_str = format_points_per_hour(session.points, prod_secs)
         earnings = session.points * self.logic.point_price
 
         lines = [
-            f"Начало:  {format_datetime(session.started_at)}",
-            f"Конец:   {format_datetime(session.ended_at)}",
-            f"Длительность: {format_duration(session.duration)}",
-            f"Чистое время в панорамах: {format_duration(prod_secs)}",
-            f"Точек: {session.points}",
-            f"Скорость: {pph}",
-            f"Заработано: {earnings:.2f} руб.",
-            "",
-            "Время по вкладкам:"
+            "┌──────────────────────────────────────────────",
+            f"│ 📅 {format_datetime(session.started_at)}",
+            f"│ ⏱ Длительность:  {format_duration(session.duration)}",
+            f"│ 📌 Точек:        {session.points}",
+            f"│ ⚡ Скорость:     {speed_str}",
+            f"│ 💰 Заработано:   {earnings:.0f} ₽",
+            f"│ ⏱ Чистое время:  {format_duration(prod_secs)}",
+            "├──────────────────────────────────────────────",
+            "│ 📂 Вкладки (только время спринтов):",
         ]
         self.detail_text.insert(tk.END, "\n".join(lines) + "\n")
-        if session.tab_times:
-            for title, secs in sorted(session.tab_times.items(), key=lambda x: x[1], reverse=True):
-                marker = " ★" if is_productive_tab(title) else ""
-                self.detail_text.insert(tk.END, f"  {format_duration(secs)}  —  {title}{marker}\n")
-        else:
-            self.detail_text.insert(tk.END, "  Нет данных по вкладкам\n")
 
+        if session.tab_times:
+            for title, secs in sorted(session.tab_times.items(), key=lambda x: x[1], reverse=True)[:10]:
+                marker = " ⭐" if is_productive_tab(title) else ""
+                self.detail_text.insert(tk.END, f"│   {format_duration(secs)}  —  {title[:40]}{marker}\n")
+            if len(session.tab_times) > 10:
+                self.detail_text.insert(tk.END, f"│   ... и ещё {len(session.tab_times) - 10} вкладок\n")
+        else:
+            self.detail_text.insert(tk.END, "│   Нет данных по вкладкам\n")
+
+        self.detail_text.insert(tk.END, "└──────────────────────────────────────────────")
         self.delete_btn.config(state=tk.NORMAL)
+
+    def _copy_details(self):
+        """Копировать детали в буфер обмена."""
+        text = self.detail_text.get(1.0, tk.END)
+        self.window.clipboard_clear()
+        self.window.clipboard_append(text)
+        self.window.update()
 
     # ---------- Удаление ----------
     def _delete_selected_session(self):
@@ -506,7 +618,6 @@ class StatsWindow:
         self.logic.points = max(0, self.logic.points - removed.points)
         self.logic.level = calc_level(self.logic.points)
 
-        from src.core.storage import save_progress
         save_progress(
             self.logic.points,
             self.logic.level,
@@ -519,12 +630,24 @@ class StatsWindow:
             self.logic.session_points,
             self.logic.tab_times,
             self.logic.daily_goal,
-            self.logic.goal_start_date
+            self.logic.goal_start_date,
+            self.logic.current_phase,
+            self.logic.current_sprint_index,
+            self.logic.sprint_finished,
+            self.logic.current_phase_start,
+            self.logic.current_tab,
+            self.logic._last_tab_poll,
+            self.logic._recording,
+            self.logic.total_goal,
+            self.logic.total_goal_achieved_notified,
+            self.logic.real_earnings,
+            self.logic.goals,
+            self.logic.active_goal_id,
         )
 
         self.selected_session = None
         self.logic.on_update()
-        self._apply_filter()  # обновляем интерфейс
+        self._apply_filter()
 
     # ---------- Закрытие ----------
     def close(self):

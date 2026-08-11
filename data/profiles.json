@@ -1,0 +1,160 @@
+{
+  "profiles": [
+    {
+      "id": "1786414507.573758",
+      "name": "Стандартный",
+      "phases": [
+        {
+          "type": "sprint",
+          "duration": 15
+        },
+        {
+          "type": "break",
+          "duration": 3
+        },
+        {
+          "type": "sprint",
+          "duration": 15
+        },
+        {
+          "type": "break",
+          "duration": 3
+        },
+        {
+          "type": "sprint",
+          "duration": 15
+        }
+      ],
+      "repeat": 1
+    },
+    {
+      "id": "1786414507.573758",
+      "name": "Интенсивный",
+      "phases": [
+        {
+          "type": "sprint",
+          "duration": 25
+        },
+        {
+          "type": "break",
+          "duration": 5
+        },
+        {
+          "type": "sprint",
+          "duration": 25
+        },
+        {
+          "type": "break",
+          "duration": 5
+        }
+      ],
+      "repeat": 1
+    },
+    {
+      "id": "1786414507.573758",
+      "name": "Маленькие шаги",
+      "phases": [
+        {
+          "type": "sprint",
+          "duration": 5
+        },
+        {
+          "type": "break",
+          "duration": 2
+        },
+        {
+          "type": "sprint",
+          "duration": 5
+        },
+        {
+          "type": "break",
+          "duration": 2
+        },
+        {
+          "type": "sprint",
+          "duration": 5
+        }
+      ],
+      "repeat": 1
+    },
+    {
+      "id": "1786414507.573758",
+      "name": "Одиночный спринт",
+      "phases": [
+        {
+          "type": "sprint",
+          "duration": 15
+        }
+      ],
+      "repeat": 1
+    },
+    {
+      "id": "1786449762.3785262",
+      "name": "Для цели",
+      "phases": [
+        {
+          "type": "sprint",
+          "duration": 15
+        },
+        {
+          "type": "break",
+          "duration": 3
+        },
+        {
+          "type": "sprint",
+          "duration": 15
+        },
+        {
+          "type": "break",
+          "duration": 3
+        },
+        {
+          "type": "sprint",
+          "duration": 15
+        },
+        {
+          "type": "break",
+          "duration": 3
+        },
+        {
+          "type": "sprint",
+          "duration": 15
+        },
+        {
+          "type": "break",
+          "duration": 30
+        },
+        {
+          "type": "sprint",
+          "duration": 15
+        },
+        {
+          "type": "break",
+          "duration": 3
+        },
+        {
+          "type": "sprint",
+          "duration": 15
+        },
+        {
+          "type": "break",
+          "duration": 3
+        },
+        {
+          "type": "sprint",
+          "duration": 15
+        },
+        {
+          "type": "break",
+          "duration": 3
+        },
+        {
+          "type": "sprint",
+          "duration": 15
+        }
+      ],
+      "repeat": 1
+    }
+  ],
+  "active_profile_id": "1786414507.573758"
+}

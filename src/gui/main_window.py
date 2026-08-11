@@ -786,7 +786,6 @@ class TrackerGUI:
             self.logic.tab_times,
             self.logic.daily_goal,
             self.logic.goal_start_date,
-            self.logic.records,
             self.logic.current_phase,
             self.logic.current_sprint_index,
             self.logic.sprint_finished,
