@@ -27,10 +27,5 @@ dmypy.json
 *~
 .DS_Store
 
-# Project specific
-progress.json
-settings.json
-*.pyc
-
 # Windows
 Thumbs.db
