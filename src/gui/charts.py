@@ -77,6 +77,14 @@ class ChartsWindow:
         self.tab3 = tk.Frame(self.notebook, bg="#0f0f23")
         self.notebook.add(self.tab3, text="⚡ Скорость и тренд")
 
+        # Вкладка 4: Спринт vs Перерыв
+        self.tab4 = tk.Frame(self.notebook, bg="#0f0f23")
+        self.notebook.add(self.tab4, text="🔄 Спринт vs Перерыв")
+
+        # Вкладка 5: Лучшие дни и пики
+        self.tab5 = tk.Frame(self.notebook, bg="#0f0f23")
+        self.notebook.add(self.tab5, text="🏆 Лучшие дни и пики")
+
         # --- Вкладка 1: Продуктивность ---
         self._build_productivity_tab()
         
@@ -85,6 +93,12 @@ class ChartsWindow:
         
         # --- Вкладка 3: Скорость и тренд ---
         self._build_speed_tab()
+
+        # --- Вкладка 4: Спринт vs Перерыв ---
+        self._build_sprint_break_tab()
+
+        # --- Вкладка 5: Лучшие дни и пики ---
+        self._build_best_days_tab()
 
     # ---------- Шапка ----------
     def _build_header(self):
@@ -693,3 +707,267 @@ class ChartsWindow:
 
         self.fig3.tight_layout()
         self.canvas3.draw()
+
+    # ============================================================
+    # ВКЛАДКА 4: СПРИНТ vs ПЕРЕРЫВ
+    # ============================================================
+    def _build_sprint_break_tab(self):
+        """Диаграмма соотношения времени спринта и перерыва."""
+        # Заголовок с информацией
+        info_frame = tk.Frame(self.tab4, bg="#0f0f23")
+        info_frame.pack(fill=tk.X, padx=15, pady=(10, 5))
+
+        total_sprint = 0
+        total_break = 0
+        for sess in self.sessions:
+            prod_time = get_productive_tab_time(sess.tab_times)
+            total_duration = sess.duration
+            break_time = total_duration - prod_time
+            total_sprint += prod_time
+            total_break += max(0, break_time)
+
+        total_all = total_sprint + total_break
+        sprint_pct = (total_sprint / total_all * 100) if total_all > 0 else 0
+        break_pct = (total_break / total_all * 100) if total_all > 0 else 0
+
+        card = tk.Frame(info_frame, bg="#1a1a3e", relief=tk.GROOVE, bd=1, padx=12, pady=6)
+        card.pack(side=tk.LEFT)
+
+        info_text = (
+            f"📊 Всего сессий: {len(self.sessions)}  |  "
+            f"⏱ Спринт: {total_sprint/3600:.1f} ч ({sprint_pct:.0f}%)  |  "
+            f"☕ Перерыв: {total_break/3600:.1f} ч ({break_pct:.0f}%)"
+        )
+        tk.Label(
+            card,
+            text=info_text,
+            font=("Segoe UI", 9),
+            fg="#888",
+            bg="#1a1a3e"
+        ).pack()
+
+        # Круговая диаграмма
+        self.fig4 = Figure(figsize=(10, 6), dpi=100, facecolor="#0f0f23")
+        self.ax4 = self.fig4.add_subplot(111)
+        self.ax4.set_facecolor("#1a1a3e")
+
+        self.canvas4 = FigureCanvasTkAgg(self.fig4, master=self.tab4)
+        self.canvas4.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+
+        self._update_sprint_break_chart()
+
+    def _update_sprint_break_chart(self):
+        """Обновить круговую диаграмму спринт vs перерыв."""
+        self.ax4.clear()
+
+        total_sprint = 0
+        total_break = 0
+        for sess in self.sessions:
+            prod_time = get_productive_tab_time(sess.tab_times)
+            total_duration = sess.duration
+            break_time = total_duration - prod_time
+            total_sprint += prod_time
+            total_break += max(0, break_time)
+
+        if total_sprint == 0 and total_break == 0:
+            self.ax4.text(0.5, 0.5, "Нет данных", ha='center', va='center',
+                         color='#888', fontsize=14, fontweight='bold')
+            self.ax4.set_facecolor('#1a1a3e')
+            self.canvas4.draw()
+            return
+
+        # Круговая диаграмма
+        sizes = [total_sprint, total_break]
+        colors = ['#00d4aa', '#4ecdc4']
+        labels = [f'⏱ Спринт\n{total_sprint/3600:.1f} ч\n({total_sprint/3600/sum([total_sprint, total_break])*100:.0f}%)',
+                  f'☕ Перерыв\n{total_break/3600:.1f} ч\n({total_break/3600/sum([total_sprint, total_break])*100:.0f}%)']
+        explode = (0.05, 0.05)
+
+        wedges, texts, autotexts = self.ax4.pie(
+            sizes,
+            explode=explode,
+            labels=labels,
+            colors=colors,
+            autopct='%1.1f%%',
+            shadow=True,
+            startangle=90,
+            textprops={'color': 'white', 'fontsize': 10}
+        )
+
+        self.ax4.set_title(
+            '🔄 Соотношение времени спринта и перерыва',
+            color='white', fontsize=14, fontweight='bold', pad=15
+        )
+        self.ax4.set_facecolor('#1a1a3e')
+
+        # Средняя длительность спринтов и перерывов
+        sprint_durations = []
+        break_durations = []
+        for sess in self.sessions:
+            prod_time = get_productive_tab_time(sess.tab_times)
+            total_duration = sess.duration
+            break_time = total_duration - prod_time
+            sprint_durations.append(prod_time / 3600)
+            break_durations.append(max(0, break_time) / 3600)
+
+        avg_sprint = sum(sprint_durations) / len(sprint_durations) if sprint_durations else 0
+        avg_break = sum(break_durations) / len(break_durations) if break_durations else 0
+
+        # Дополнительная информация
+        info_text = (
+            f"📊 Средний спринт: {avg_sprint*60:.0f} мин  |  "
+            f"☕ Средний перерыв: {avg_break*60:.0f} мин  |  "
+            f"📈 Баланс: {sprint_durations.count(max(sprint_durations))} сессий с самым длинным спринтом"
+        )
+
+        self.ax4.text(
+            0.5, -0.15, info_text,
+            transform=self.ax4.transAxes,
+            ha='center', va='top',
+            color='#888', fontsize=10
+        )
+
+        self.fig4.tight_layout()
+        self.canvas4.draw()
+
+    # ============================================================
+    # ВКЛАДКА 5: ЛУЧШИЕ ДНИ И ПИКИ
+    # ============================================================
+    def _build_best_days_tab(self):
+        """График с маркерами лучших дней и пиков."""
+        # Заголовок
+        header_frame = tk.Frame(self.tab5, bg="#0f0f23")
+        header_frame.pack(fill=tk.X, padx=15, pady=(10, 5))
+
+        tk.Label(
+            header_frame,
+            text="🏆 Рекорды и пики продуктивности",
+            font=("Segoe UI", 12, "bold"),
+            fg="#ffd700",
+            bg="#0f0f23"
+        ).pack(side=tk.LEFT)
+
+        # Таблица рекордов
+        records_frame = tk.Frame(self.tab5, bg="#0f0f23")
+        records_frame.pack(fill=tk.X, padx=15, pady=(0, 5))
+
+        self._records_text = tk.Text(
+            records_frame,
+            bg="#1a1a3e",
+            fg="#eaeaea",
+            font=("Segoe UI", 9),
+            wrap=tk.WORD,
+            relief=tk.FLAT,
+            padx=10,
+            pady=10,
+            height=4,
+            state=tk.DISABLED
+        )
+        self._records_text.pack(fill=tk.X)
+
+        self._update_best_days_chart()
+
+    def _update_best_days_chart(self):
+        """Обновить график с маркерами лучших дней."""
+        if not hasattr(self, 'fig5'):
+            self.fig5 = Figure(figsize=(10, 6), dpi=100, facecolor="#0f0f23")
+            self.ax5 = self.fig5.add_subplot(111)
+            self.ax5.set_facecolor("#1a1a3e")
+
+            self.canvas5 = FigureCanvasTkAgg(self.fig5, master=self.tab5)
+            self.canvas5.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+
+        self.ax5.clear()
+
+        if not self.daily_data:
+            self.ax5.text(0.5, 0.5, "Нет данных", ha='center', va='center',
+                         color='#888', fontsize=14, fontweight='bold')
+            self.ax5.set_facecolor('#1a1a3e')
+            self.canvas5.draw()
+            return
+
+        # Агрегируем точки по дням
+        dates = sorted(self.daily_data.keys())
+        x = list(range(len(dates)))
+        points_vals = [self.daily_data[d]['points'] for d in dates]
+        money_vals = [self.daily_data[d]['money'] for d in dates]
+
+        # Находим лучшие дни
+        top_points = sorted(points_vals, reverse=True)[:5]
+        top_money = sorted(money_vals, reverse=True)[:5]
+
+        # Обновляем таблицу рекордов
+        records_text = "🏆 ЛУЧШИЕ ДНИ ПО ТОЧКАМ:\n"
+        for i, pts in enumerate(top_points[:3], 1):
+            idx = points_vals.index(pts)
+            records_text += f"   #{i} {dates[idx]}: {pts} точек\n"
+
+        records_text += "\n💰 ЛУЧШИЕ ДНИ ПО ЗАРАБОТКУ:\n"
+        for i, money in enumerate(top_money[:3], 1):
+            idx = money_vals.index(money)
+            records_text += f"   #{i} {dates[idx]}: {money:.0f} руб.\n"
+
+        records_text += "\n📊 СТАТИСТИКА:\n"
+        records_text += f"   Максимум точек: {max(points_vals)}  |  "
+        records_text += f"Среднее: {sum(points_vals)/len(points_vals):.0f}\n"
+        records_text += f"   Максимум заработка: {max(money_vals):.0f} руб.  |  "
+        records_text += f"Среднее: {sum(money_vals)/len(money_vals):.0f} руб."
+
+        self._records_text.config(state=tk.NORMAL)
+        self._records_text.delete(1.0, tk.END)
+        self._records_text.insert(1.0, records_text)
+        self._records_text.config(state=tk.DISABLED)
+
+        # График
+        self.ax5.plot(x, points_vals, marker='o', linestyle='-',
+                      color='#00d4aa', linewidth=2.5, markersize=8,
+                      label='Точки', alpha=0.9)
+
+        # Маркеры лучших дней
+        for i, date in enumerate(dates):
+            if points_vals[i] in top_points[:3]:
+                self.ax5.scatter([i], [points_vals[i]],
+                               color='#ffd700', s=200, zorder=5,
+                               marker='*', edgecolors='#ff6b6b', linewidths=2)
+                self.ax5.annotate(
+                    '⭐',
+                    xy=(i, points_vals[i]),
+                    xytext=(10, 10),
+                    textcoords='offset points',
+                    fontsize=16,
+                    color='#ffd700',
+                    fontweight='bold'
+                )
+
+        # Линия среднего
+        avg_points = sum(points_vals) / len(points_vals)
+        self.ax5.axhline(y=avg_points, color='#a29bfe', linestyle='--',
+                        linewidth=2, alpha=0.7, label=f'Среднее: {avg_points:.0f}')
+
+        # Заполнение
+        self.ax5.fill_between(x, 0, points_vals, color='#00d4aa', alpha=0.1)
+
+        # Настройки
+        self.ax5.set_xlabel("Дата", color='#888', fontsize=11)
+        self.ax5.set_ylabel("Точки", color='#888', fontsize=11)
+        self.ax5.set_title("🏆 Лучшие дни и пики продуктивности",
+                         color='white', fontsize=14, fontweight='bold', pad=15)
+        self.ax5.tick_params(colors='#888', labelsize=9)
+        self.ax5.grid(True, color='#2a2a40', linestyle='--', alpha=0.5)
+        self.ax5.set_facecolor('#1a1a3e')
+
+        self.ax5.spines['top'].set_visible(False)
+        self.ax5.spines['right'].set_visible(False)
+        self.ax5.spines['left'].set_color('#2a2a40')
+        self.ax5.spines['bottom'].set_color('#2a2a40')
+
+        self.ax5.set_xticks(x)
+        self.ax5.set_xticklabels(dates, rotation=45, ha='right', color='#888', fontsize=8)
+
+        legend = self.ax5.legend(loc='upper left', facecolor='#1a1a3e',
+                                labelcolor='white', edgecolor='#2a2a40',
+                                fontsize=10, framealpha=0.9)
+        legend.get_frame().set_linewidth(0)
+
+        self.fig5.tight_layout()
+        self.canvas5.draw()
