@@ -141,12 +141,19 @@ class ChartsWindow:
             daily[day]['money'] += sess.points * self.point_price
             daily[day]['hours'] += get_productive_tab_time(sess.tab_times) / 3600.0
 
+        # Добавляем текущую сессию ТОЛЬКО если она ещё не в self.sessions
         if self.logic.session_active and self.logic.session_points > 0:
-            today = time.strftime("%Y-%m-%d")
-            if today not in daily:
-                daily[today] = {'points': 0, 'money': 0.0, 'hours': 0.0}
-            daily[today]['points'] += self.logic.session_points
-            daily[today]['money'] += self.logic.session_points * self.point_price
+            # Проверяем, есть ли уже сессия с таким же started_at
+            already_counted = any(
+                s.started_at == self.logic.session_start
+                for s in self.sessions
+            )
+            if not already_counted:
+                today = time.strftime("%Y-%m-%d")
+                if today not in daily:
+                    daily[today] = {'points': 0, 'money': 0.0, 'hours': 0.0}
+                daily[today]['points'] += self.logic.session_points
+                daily[today]['money'] += self.logic.session_points * self.point_price
 
         return daily
 

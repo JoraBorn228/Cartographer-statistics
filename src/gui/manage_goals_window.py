@@ -159,6 +159,8 @@ class ManageGoalsWindow:
     def _on_select(self, event=None):
         selection = self.listbox.curselection()
         if not selection or not self.logic.goals:
+            if not self.logic.goals:
+                messagebox.showinfo("Цели", "Создайте цель в окне прогнозов (📈)", parent=self.window)
             return
         
         idx = selection[0]
@@ -173,6 +175,8 @@ class ManageGoalsWindow:
     def _on_delete(self):
         selection = self.listbox.curselection()
         if not selection or not self.logic.goals:
+            if not self.logic.goals:
+                messagebox.showinfo("Цели", "Создайте цель в окне прогнозов (📈)", parent=self.window)
             return
         
         idx = selection[0]

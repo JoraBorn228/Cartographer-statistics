@@ -53,6 +53,7 @@ class Session:
             "ended_at": self.ended_at,
             "points": self.points,
             "tab_times": self.tab_times,
+            "tags": self.tags,
         }
 
     @classmethod
@@ -62,6 +63,7 @@ class Session:
             ended_at=data["ended_at"],
             points=data.get("points", 0),
             tab_times=data.get("tab_times", {}),
+            tags=data.get("tags", []),
         )
 
 

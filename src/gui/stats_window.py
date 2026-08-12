@@ -13,7 +13,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 from src.core.models import Session
-from src.core.storage import save_progress
+from src.core.storage import save_logic_progress
 from src.utils.config import BG, FG, ACCENT, BAR_BG, BTN_BG, BTN_STOP
 from src.utils.helpers import (
     format_duration, format_datetime, format_points_per_hour,
@@ -596,15 +596,23 @@ class StatsWindow:
     def _delete_selected_session(self):
         if self.selected_session is None:
             return
+        
+        # Не даём удалять "живую" текущую сессию
         if (self.logic.session_active and self.logic.session_start and
             self.selected_session.started_at == self.logic.session_start):
             tk.messagebox.showinfo("Удаление", "Нельзя удалить текущую активную сессию.", parent=self.window)
             return
 
-        try:
-            real_idx = self.logic.sessions.index(self.selected_session)
-        except ValueError:
-            tk.messagebox.showerror("Ошибка", "Сессия не найдена.", parent=self.window)
+        # Ищем сессию в logic.sessions по started_at + points (так как selected_session
+        # может быть "живой" копией, а не оригиналом из списка)
+        real_session = None
+        for s in self.logic.sessions:
+            if s.started_at == self.selected_session.started_at and s.points == self.selected_session.points:
+                real_session = s
+                break
+        
+        if real_session is None:
+            tk.messagebox.showerror("Ошибка", "Сессия не найдена в сохранённых данных.", parent=self.window)
             return
 
         if not tk.messagebox.askyesno(
@@ -614,36 +622,12 @@ class StatsWindow:
         ):
             return
 
+        real_idx = self.logic.sessions.index(real_session)
         removed = self.logic.sessions.pop(real_idx)
         self.logic.points = max(0, self.logic.points - removed.points)
         self.logic.level = calc_level(self.logic.points)
 
-        save_progress(
-            self.logic.points,
-            self.logic.level,
-            self.logic.sprint_duration,
-            self.logic.break_duration,
-            self.logic.sprint_repeats,
-            self.logic.sessions,
-            self.logic.session_active,
-            self.logic.session_start,
-            self.logic.session_points,
-            self.logic.tab_times,
-            self.logic.daily_goal,
-            self.logic.goal_start_date,
-            self.logic.current_phase,
-            self.logic.current_sprint_index,
-            self.logic.sprint_finished,
-            self.logic.current_phase_start,
-            self.logic.current_tab,
-            self.logic._last_tab_poll,
-            self.logic._recording,
-            self.logic.total_goal,
-            self.logic.total_goal_achieved_notified,
-            self.logic.real_earnings,
-            self.logic.goals,
-            self.logic.active_goal_id,
-        )
+        save_logic_progress(self.logic)
 
         self.selected_session = None
         self.logic.on_update()

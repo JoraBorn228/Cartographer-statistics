@@ -1,14 +1,25 @@
 """
-Окно настроек приложения.
+Окно настроек приложения (улучшенный интерфейс).
 """
 import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Callable
 
-from src.utils.config import BG, FG, ACCENT, BTN_BG, BTN_ACTIVE, BAR_BG
+from src.utils.config import (
+    BG, BG_CARD, BG_CARD_HOVER, FG, FG_SECONDARY, ACCENT, ACCENT_DARK,
+    BTN_BG, BTN_ACTIVE, BTN_HOVER, BAR_BG,
+)
 from src.core.settings_manager import load_settings, save_settings, DEFAULT_SETTINGS
-from src.core.profile_manager import ProfileManager
 from src.gui.profile_editor import ProfileEditor
+
+# Шрифты
+_FONT_TITLE = ("Segoe UI", 16, "bold")
+_FONT_SECTION = ("Segoe UI", 11, "bold")
+_FONT_LABEL = ("Segoe UI", 9)
+_FONT_LABEL_BOLD = ("Segoe UI", 9, "bold")
+_FONT_HINT = ("Segoe UI", 8)
+_FONT_BTN = ("Segoe UI", 10, "bold")
+_FONT_BTN_SECONDARY = ("Segoe UI", 10)
 
 
 class SettingsWindow:
@@ -17,37 +28,107 @@ class SettingsWindow:
         self.logic = logic
         self.on_settings_changed = on_settings_changed
 
+        # Используем единый ProfileManager из логики
         self.settings = load_settings()
-        self.profile_manager = ProfileManager()
+        self.profile_manager = self.logic.profile_manager
 
         self.window = tk.Toplevel(parent)
         self.window.title("⚙️ Настройки")
-        self.window.geometry("550x650")
-        self.window.minsize(500, 600)
+        self.window.geometry("580x700")
+        self.window.minsize(520, 620)
         self.window.configure(bg=BG)
         self.window.attributes("-topmost", True)
 
+        # Настройка стиля ttk для Combobox
+        self._setup_style()
+
         self._build_ui()
         self._update_profile_info()
+        self._update_combos_from_profile()
 
+    # ============================================================
+    #  СТИЛЬ
+    # ============================================================
+    def _setup_style(self):
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+        style.configure(
+            "Settings.TCombobox",
+            fieldbackground=BAR_BG,
+            background=BAR_BG,
+            foreground=FG,
+            bordercolor=ACCENT_DARK,
+            lightcolor=ACCENT_DARK,
+            darkcolor=ACCENT_DARK,
+            arrowcolor=ACCENT,
+            insertcolor=FG,
+            relief=tk.FLAT,
+            borderwidth=1,
+            padding=4,
+        )
+        style.map(
+            "Settings.TCombobox",
+            fieldbackground=[("readonly", BAR_BG)],
+            foreground=[("readonly", FG)],
+            bordercolor=[("focus", ACCENT)],
+        )
+        style.configure(
+            "Settings.TEntry",
+            fieldbackground=BAR_BG,
+            foreground=FG,
+            insertcolor=FG,
+            bordercolor=ACCENT_DARK,
+            lightcolor=ACCENT_DARK,
+            darkcolor=ACCENT_DARK,
+            relief=tk.FLAT,
+            borderwidth=1,
+            padding=4,
+        )
+        style.map(
+            "Settings.TEntry",
+            bordercolor=[("focus", ACCENT)],
+        )
+
+    # ============================================================
+    #  ПОСТРОЕНИЕ ИНТЕРФЕЙСА
+    # ============================================================
     def _build_ui(self):
-        # Заголовок
+        # --- Шапка ---
         header = tk.Frame(self.window, bg=BG)
-        header.pack(fill=tk.X, padx=15, pady=(12, 8))
-        
+        header.pack(fill=tk.X, padx=18, pady=(14, 6))
+
         tk.Label(
             header,
-            text="⚙️ Настройки",
-            font=("Segoe UI", 16, "bold"),
+            text="⚙️",
+            font=("Segoe UI", 18),
+            bg=BG,
+        ).pack(side=tk.LEFT, padx=(0, 8))
+
+        tk.Label(
+            header,
+            text="Настройки",
+            font=_FONT_TITLE,
             fg=ACCENT,
-            bg=BG
+            bg=BG,
         ).pack(side=tk.LEFT)
 
-        # Canvas со скроллом
-        canvas = tk.Canvas(self.window, bg=BG, highlightthickness=0)
+        # --- Подзаголовок-описание ---
+        tk.Label(
+            self.window,
+            text="Настройте спринты, цель, заработок и систему под себя",
+            fg=FG_SECONDARY,
+            bg=BG,
+            font=_FONT_HINT,
+        ).pack(anchor=tk.W, padx=18, pady=(0, 8))
+
+        # --- Canvas со скроллом ---
+        canvas = tk.Canvas(self.window, bg=BG, highlightthickness=0, bd=0)
         scrollbar = tk.Scrollbar(self.window, orient=tk.VERTICAL, command=canvas.yview)
         scrollable_frame = tk.Frame(canvas, bg=BG)
-        
+
         scrollable_frame.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
@@ -55,216 +136,290 @@ class SettingsWindow:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=(0, 5))
+        # Колесо мыши для скролла
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        self.window.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"), add="+")
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(14, 0), pady=(0, 4))
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=(0, 4))
+
+        # Внутренний отступ для контента
+        content = tk.Frame(scrollable_frame, bg=BG)
+        content.pack(fill=tk.X, padx=14, pady=4)
 
         # ============================================================
         # ПРОФИЛЬ СПРИНТОВ
         # ============================================================
-        self._add_section(scrollable_frame, "🎯 Профиль спринтов")
+        card = self._add_card(content, "🎯 Профиль спринтов")
 
-        profile_frame = tk.Frame(scrollable_frame, bg=BG, relief=tk.GROOVE, bd=1)
-        profile_frame.pack(fill=tk.X, pady=3, padx=2)
-
-        row1 = tk.Frame(profile_frame, bg=BG)
-        row1.pack(fill=tk.X, padx=8, pady=(6, 2))
+        row1 = tk.Frame(card, bg=BG_CARD)
+        row1.pack(fill=tk.X, padx=12, pady=(10, 2))
 
         tk.Label(
             row1,
-            text="Активный профиль:",
-            fg=FG,
-            bg=BG,
-            font=("Segoe UI", 9)
+            text="Активный профиль",
+            fg=FG_SECONDARY,
+            bg=BG_CARD,
+            font=_FONT_LABEL,
         ).pack(side=tk.LEFT)
 
         self.profile_label = tk.Label(
             row1,
             text="Загрузка...",
             fg=ACCENT,
-            bg=BG,
-            font=("Segoe UI", 9, "bold")
+            bg=BG_CARD,
+            font=_FONT_LABEL_BOLD,
         )
-        self.profile_label.pack(side=tk.LEFT, padx=(8, 0))
+        self.profile_label.pack(side=tk.RIGHT)
 
-        row2 = tk.Frame(profile_frame, bg=BG)
-        row2.pack(fill=tk.X, padx=8, pady=(2, 6))
+        row2 = tk.Frame(card, bg=BG_CARD)
+        row2.pack(fill=tk.X, padx=12, pady=(6, 12))
 
-        self.edit_btn = tk.Button(
+        self.edit_btn = self._make_button(
             row2,
             text="📝 Редактировать профили",
             command=self._edit_profiles,
-            bg=BTN_ACTIVE,
-            fg=BG,
-            font=("Segoe UI", 9, "bold"),
-            relief=tk.FLAT,
-            padx=12,
-            pady=4,
-            cursor="hand2"
+            primary=True,
         )
         self.edit_btn.pack(side=tk.LEFT)
 
         tk.Label(
             row2,
             text="Создайте свои последовательности",
-            fg="#666",
-            bg=BG,
-            font=("Segoe UI", 8)
+            fg=FG_SECONDARY,
+            bg=BG_CARD,
+            font=_FONT_HINT,
         ).pack(side=tk.LEFT, padx=(10, 0))
 
         # ============================================================
         # БАЗОВЫЕ НАСТРОЙКИ
         # ============================================================
-        self._add_section(scrollable_frame, "⏱ Базовые настройки спринтов")
+        card = self._add_card(content, "⏱ Базовые настройки спринтов")
 
         tk.Label(
-            scrollable_frame,
+            card,
             text="Используются, если не выбран профиль",
-            fg="#666",
-            bg=BG,
-            font=("Segoe UI", 8)
-        ).pack(anchor=tk.W, padx=8, pady=(0, 5))
+            fg=FG_SECONDARY,
+            bg=BG_CARD,
+            font=_FONT_HINT,
+        ).pack(anchor=tk.W, padx=12, pady=(8, 6))
 
-        # Спринт
-        row = tk.Frame(scrollable_frame, bg=BG)
-        row.pack(fill=tk.X, pady=3, padx=5)
-        tk.Label(row, text="Длительность спринта (мин):", fg=FG, bg=BG, width=22, anchor=tk.W).pack(side=tk.LEFT)
         self.sprint_var = tk.StringVar(value=str(self.settings.get("sprint_duration", 15)))
-        ttk.Combobox(
-            row, textvariable=self.sprint_var,
-            values=[5, 10, 15, 20, 25, 30, 45, 60],
-            width=8, state="readonly"
-        ).pack(side=tk.LEFT)
+        self._add_field(card, "Длительность спринта (мин)", self.sprint_var, "combo", [5, 10, 15, 20, 25, 30, 45, 60])
 
-        # Перерыв
-        row = tk.Frame(scrollable_frame, bg=BG)
-        row.pack(fill=tk.X, pady=3, padx=5)
-        tk.Label(row, text="Длительность перерыва (мин):", fg=FG, bg=BG, width=22, anchor=tk.W).pack(side=tk.LEFT)
         self.break_var = tk.StringVar(value=str(self.settings.get("break_duration", 5)))
-        ttk.Combobox(
-            row, textvariable=self.break_var,
-            values=[1, 2, 3, 5, 10, 15],
-            width=8, state="readonly"
-        ).pack(side=tk.LEFT)
+        self._add_field(card, "Длительность перерыва (мин)", self.break_var, "combo", [1, 2, 3, 5, 10, 15])
 
-        # Повторы
-        row = tk.Frame(scrollable_frame, bg=BG)
-        row.pack(fill=tk.X, pady=3, padx=5)
-        tk.Label(row, text="Количество повторов:", fg=FG, bg=BG, width=22, anchor=tk.W).pack(side=tk.LEFT)
         self.repeats_var = tk.StringVar(value=str(self.settings.get("sprint_repeats", 1)))
-        ttk.Combobox(
-            row, textvariable=self.repeats_var,
-            values=list(range(1, 11)),
-            width=8, state="readonly"
-        ).pack(side=tk.LEFT)
+        self._add_field(card, "Количество повторов", self.repeats_var, "combo", list(range(1, 11)))
 
         # ============================================================
         # ЦЕЛЬ
         # ============================================================
-        self._add_section(scrollable_frame, "🎯 Цель")
+        card = self._add_card(content, "🎯 Цель")
 
-        row = tk.Frame(scrollable_frame, bg=BG)
-        row.pack(fill=tk.X, pady=3, padx=5)
-        tk.Label(row, text="Автоматическая корректировка цели:", fg=FG, bg=BG, width=22, anchor=tk.W).pack(side=tk.LEFT)
         self.auto_goal_var = tk.BooleanVar(value=self.settings.get("auto_goal_adjustment", True))
-        tk.Checkbutton(
-            row, variable=self.auto_goal_var,
-            bg=BG, fg=FG, selectcolor=BG, activebackground=BG
-        ).pack(side=tk.LEFT)
+        self._add_toggle(card, "Автоматическая корректировка цели", self.auto_goal_var)
 
         # ============================================================
         # ЗАРАБОТОК
         # ============================================================
-        self._add_section(scrollable_frame, "💰 Заработок")
+        card = self._add_card(content, "💰 Заработок")
 
-        row = tk.Frame(scrollable_frame, bg=BG)
-        row.pack(fill=tk.X, pady=3, padx=5)
-        tk.Label(row, text="Цена одной точки (руб.):", fg=FG, bg=BG, width=22, anchor=tk.W).pack(side=tk.LEFT)
         self.price_var = tk.StringVar(value=str(self.settings.get("point_price", 1.3)))
-        tk.Entry(
-            row, textvariable=self.price_var,
-            width=8, bg=BAR_BG, fg=FG, insertbackground=FG
-        ).pack(side=tk.LEFT)
+        self._add_field(card, "Цена одной точки (руб.)", self.price_var, "entry")
 
         # ============================================================
         # СИСТЕМНЫЕ
         # ============================================================
-        self._add_section(scrollable_frame, "⚙️ Системные")
+        card = self._add_card(content, "⚙️ Системные")
 
-        row = tk.Frame(scrollable_frame, bg=BG)
-        row.pack(fill=tk.X, pady=3, padx=5)
-        tk.Label(row, text="Интервал автосохранения (сек):", fg=FG, bg=BG, width=22, anchor=tk.W).pack(side=tk.LEFT)
         self.auto_save_var = tk.StringVar(value=str(self.settings.get("auto_save_interval", 60)))
-        tk.Entry(
-            row, textvariable=self.auto_save_var,
-            width=8, bg=BAR_BG, fg=FG, insertbackground=FG
-        ).pack(side=tk.LEFT)
+        self._add_field(card, "Интервал автосохранения (сек)", self.auto_save_var, "entry")
 
         # ============================================================
         # ЗВУКИ
         # ============================================================
-        self._add_section(scrollable_frame, "🔊 Звуки")
+        card = self._add_card(content, "🔊 Звуки")
 
-        row = tk.Frame(scrollable_frame, bg=BG)
-        row.pack(fill=tk.X, pady=3, padx=5)
-        tk.Label(row, text="Включить звуки:", fg=FG, bg=BG, width=22, anchor=tk.W).pack(side=tk.LEFT)
         self.sound_var = tk.BooleanVar(value=self.settings.get("sound_enabled", True))
-        tk.Checkbutton(
-            row, variable=self.sound_var,
-            bg=BG, fg=FG, selectcolor=BG, activebackground=BG
-        ).pack(side=tk.LEFT)
+        self._add_toggle(card, "Включить звуки", self.sound_var)
 
         # ============================================================
         # КНОПКИ
         # ============================================================
         btn_frame = tk.Frame(self.window, bg=BG)
-        btn_frame.pack(fill=tk.X, padx=15, pady=12)
+        btn_frame.pack(fill=tk.X, padx=18, pady=(6, 14))
 
-        tk.Button(
+        self._make_button(
             btn_frame,
             text="💾 Сохранить",
             command=self._save_settings,
-            bg=BTN_ACTIVE,
-            fg=BG,
-            font=("Segoe UI", 10, "bold"),
-            relief=tk.FLAT,
-            padx=20,
-            pady=6,
-            cursor="hand2"
+            primary=True,
         ).pack(side=tk.LEFT, padx=(0, 8))
 
-        tk.Button(
+        self._make_button(
             btn_frame,
-            text="🔄 Сброс",
+            text="🔄 Сбросить",
             command=self._reset_defaults,
-            bg=BTN_BG,
-            fg=FG,
-            font=("Segoe UI", 10),
-            relief=tk.FLAT,
-            padx=16,
-            pady=6,
-            cursor="hand2"
         ).pack(side=tk.LEFT, padx=(0, 8))
 
-        tk.Button(
+        self._make_button(
             btn_frame,
-            text="❌ Закрыть",
+            text="Закрыть",
             command=self.window.destroy,
-            bg=BTN_BG,
-            fg=FG,
-            font=("Segoe UI", 10),
-            relief=tk.FLAT,
-            padx=16,
-            pady=6,
-            cursor="hand2"
         ).pack(side=tk.LEFT)
 
+    # ============================================================
+    #  ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ИНТЕРФЕЙСА
+    # ============================================================
+    def _add_card(self, parent, title):
+        """Карточка секции с заголовком и акцентной левой границей."""
+        wrapper = tk.Frame(parent, bg=BG)
+        wrapper.pack(fill=tk.X, pady=(6, 6))
+
+        # Акцентная левая полоска
+        bar = tk.Frame(wrapper, bg=ACCENT, width=3)
+        bar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 0))
+
+        # Карточка
+        card = tk.Frame(wrapper, bg=BG_CARD)
+        card.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Заголовок карточки
+        header = tk.Frame(card, bg=BG_CARD)
+        header.pack(fill=tk.X, padx=12, pady=(10, 4))
+        tk.Label(
+            header,
+            text=title,
+            font=_FONT_SECTION,
+            fg=FG,
+            bg=BG_CARD,
+        ).pack(side=tk.LEFT)
+
+        # Тонкая разделительная линия
+        tk.Frame(card, bg=ACCENT_DARK, height=1).pack(fill=tk.X, padx=12, pady=(0, 2))
+
+        # Hover-эффект на карточке
+        self._bind_hover(card, BG_CARD, BG_CARD_HOVER)
+        return card
+
+    def _add_field(self, card, label_text, var, kind="entry", values=None):
+        """Поле ввода / комбобокс внутри карточки."""
+        row = tk.Frame(card, bg=BG_CARD)
+        row.pack(fill=tk.X, padx=12, pady=4)
+
+        tk.Label(
+            row,
+            text=label_text,
+            fg=FG,
+            bg=BG_CARD,
+            font=_FONT_LABEL,
+            width=26,
+            anchor=tk.W,
+        ).pack(side=tk.LEFT)
+
+        if kind == "combo":
+            cb = ttk.Combobox(
+                row, textvariable=var, values=values,
+                width=10, state="readonly", style="Settings.TCombobox",
+            )
+            cb.pack(side=tk.LEFT)
+        else:
+            ttk.Entry(
+                row, textvariable=var,
+                width=10, style="Settings.TEntry",
+            ).pack(side=tk.LEFT)
+
+        # Нижний отступ последнего поля карточки — добавим через pady
+        return row
+
+    def _add_toggle(self, card, label_text, var):
+        """Кастомный переключатель (switch) вместо чекбокса."""
+        row = tk.Frame(card, bg=BG_CARD)
+        row.pack(fill=tk.X, padx=12, pady=(6, 12))
+
+        tk.Label(
+            row,
+            text=label_text,
+            fg=FG,
+            bg=BG_CARD,
+            font=_FONT_LABEL,
+        ).pack(side=tk.LEFT)
+
+        # Контейнер переключателя
+        switch = tk.Frame(row, bg=BG_CARD)
+        switch.pack(side=tk.RIGHT)
+
+        track = tk.Frame(switch, bg=BAR_BG, width=42, height=22)
+        track.pack_propagate(False)
+        track.pack()
+
+        knob = tk.Frame(track, bg=ACCENT, width=18, height=18)
+
+        def render():
+            # Перерисовка knob
+            knob.place_forget()
+            if var.get():
+                track.configure(bg=ACCENT_DARK)
+                knob.configure(bg=BG)
+                knob.place(x=22, y=2)
+            else:
+                track.configure(bg=BAR_BG)
+                knob.configure(bg=FG_SECONDARY)
+                knob.place(x=2, y=2)
+
+        def toggle(event=None):
+            var.set(not var.get())
+            render()
+
+        track.bind("<Button-1>", toggle)
+        knob.bind("<Button-1>", toggle)
+        # Кликабельность по всей площади
+        for w in (switch,):
+            w.bind("<Button-1>", toggle)
+
+        render()
+
+    def _make_button(self, parent, text, command, primary=False):
+        """Кнопка с hover-эффектом."""
+        bg = BTN_ACTIVE if primary else BTN_BG
+        fg = BG if primary else FG
+        hover_bg = ACCENT_DARK if primary else BTN_HOVER
+        font = _FONT_BTN if primary else _FONT_BTN_SECONDARY
+
+        btn = tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=bg,
+            fg=fg,
+            font=font,
+            relief=tk.FLAT,
+            padx=18,
+            pady=7,
+            cursor="hand2",
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        self._bind_hover(btn, bg, hover_bg)
+        return btn
+
+    def _bind_hover(self, widget, normal_bg, hover_bg):
+        """Привязать hover-эффект к виджету."""
+        widget.bind("<Enter>", lambda e: widget.configure(bg=hover_bg))
+        widget.bind("<Leave>", lambda e: widget.configure(bg=normal_bg))
+
     def _add_section(self, parent, title):
+        # Совместимость: теперь используется _add_card, но оставим на всякий случай
         tk.Label(
             parent,
             text=title,
-            font=("Segoe UI", 11, "bold"),
+            font=_FONT_SECTION,
             fg=ACCENT,
-            bg=BG
+            bg=BG,
         ).pack(anchor=tk.W, pady=(10, 4), padx=5)
 
     def _update_profile_info(self):
@@ -283,10 +438,35 @@ class SettingsWindow:
         else:
             self.profile_label.config(text="Не выбран")
 
+    def _update_combos_from_profile(self):
+        """Обновить combobox'ы значениями из активного профиля."""
+        profile = self.profile_manager.get_active_profile()
+        if profile and profile.phases:
+            # Берём длительность первого спринта
+            for phase in profile.phases:
+                if phase.type == "sprint":
+                    self.sprint_var.set(str(phase.duration))
+                    break
+            # Берём длительность первого перерыва
+            for phase in profile.phases:
+                if phase.type == "break":
+                    self.break_var.set(str(phase.duration))
+                    break
+            # Количество спринтов
+            sprint_count = sum(1 for p in profile.phases if p.type == "sprint")
+            self.repeats_var.set(str(max(1, sprint_count)))
+
     def _edit_profiles(self):
         """Открыть редактор профилей."""
+        def on_profile_applied():
+            """Вызывается при применении/сохранении профиля в ProfileEditor."""
+            self._update_profile_info()
+            self._update_combos_from_profile()
+            self.profile_manager.apply_profile_to_logic(self.logic)
+            self.on_settings_changed()
+
         try:
-            editor = ProfileEditor(self.window, self.profile_manager, self._update_profile_info)
+            editor = ProfileEditor(self.window, self.profile_manager, on_profile_applied)
             self.window.wait_window(editor.window)
             
             # Проверяем, что окно ещё существует перед обновлением

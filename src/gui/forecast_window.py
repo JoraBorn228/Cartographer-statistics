@@ -8,7 +8,6 @@ import time
 
 from src.utils.helpers import get_productive_tab_time
 from src.core.storage import save_progress
-from src.gui.manage_goals_window import ManageGoalsWindow  # ← ИСПРАВЛЕНО
 
 
 

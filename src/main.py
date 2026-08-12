@@ -14,13 +14,17 @@ from src.core.logic import TrackerLogic
 from src.gui.main_window import TrackerGUI
 from src.core.storage import load_progress
 from src.core.settings_manager import load_settings
+from src.core.profile_manager import ProfileManager
 
 
 def main():
     data = load_progress()
     settings = load_settings()
 
-    logic = TrackerLogic()
+    # Единый менеджер профилей для всех компонентов
+    profile_manager = ProfileManager()
+
+    logic = TrackerLogic(profile_manager=profile_manager)
     logic.points = data.get("points", 0)
     logic.level = data.get("level", 1)
     logic.sessions = data.get("sessions", [])
@@ -41,6 +45,7 @@ def main():
     logic.auto_save_interval = settings.get("auto_save_interval", 60)
     logic.sound_enabled = settings.get("sound_enabled", True)
     logic.auto_goal_adjustment = settings.get("auto_goal_adjustment", True)
+    logic.restore_active_session(data.get("active_session"))
 
     gui = TrackerGUI(logic)
     gui.run()

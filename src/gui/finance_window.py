@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List, Dict, Optional
 
 from src.core.models import Session
-from src.core.storage import save_progress
+from src.core.storage import save_logic_progress
 from src.utils.helpers import get_productive_tab_time, format_duration
 
 
@@ -41,31 +41,7 @@ class FinanceWindow:
         self.logic.real_earnings = self.real_earnings
     
     def _save_to_file(self):
-        save_progress(
-            self.logic.points,
-            self.logic.level,
-            self.logic.sprint_duration,
-            self.logic.break_duration,
-            self.logic.sprint_repeats,
-            self.logic.sessions,
-            self.logic.session_active,
-            self.logic.session_start,
-            self.logic.session_points,
-            self.logic.tab_times,
-            self.logic.daily_goal,
-            self.logic.goal_start_date,
-            self.logic.records,
-            self.logic.current_phase,
-            self.logic.current_sprint_index,
-            self.logic.sprint_finished,
-            self.logic.current_phase_start,
-            self.logic.current_tab,
-            self.logic._last_tab_poll,
-            self.logic._recording,
-            self.logic.total_goal,
-            self.logic.total_goal_achieved_notified,
-            self.logic.real_earnings,
-        )
+        save_logic_progress(self.logic)
     
     def _build_ui(self):
         # Заголовок

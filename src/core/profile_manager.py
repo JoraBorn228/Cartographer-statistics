@@ -2,7 +2,8 @@
 Управление профилями спринтов.
 """
 import json
-import time  # ← ДОБАВЛЯЕМ!
+import time
+import uuid
 from pathlib import Path
 from typing import List, Dict, Optional
 from dataclasses import dataclass, field, asdict
@@ -21,7 +22,7 @@ class SprintProfile:
     name: str
     phases: List[Phase] = field(default_factory=list)
     repeat: int = 1  # количество повторений всего цикла
-    id: str = field(default_factory=lambda: str(time.time()))
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
     
     def total_duration(self) -> int:
         """Общая длительность профиля в минутах."""
@@ -39,7 +40,7 @@ class SprintProfile:
     def from_dict(cls, data: dict) -> "SprintProfile":
         phases = [Phase(**p) for p in data.get("phases", [])]
         return cls(
-            id=data.get("id", str(time.time())),
+            id=data.get("id", str(uuid.uuid4())),
             name=data.get("name", "Без названия"),
             phases=phases,
             repeat=data.get("repeat", 1),
@@ -66,10 +67,23 @@ class ProfileManager:
             data = json.loads(self.PROFILES_FILE.read_text(encoding="utf-8"))
             self.profiles = [SprintProfile.from_dict(p) for p in data.get("profiles", [])]
             self.active_profile_id = data.get("active_profile_id")
+            seen_ids = set()
+            changed = False
+            for profile in self.profiles:
+                if profile.id in seen_ids:
+                    profile.id = str(uuid.uuid4())
+                    changed = True
+                seen_ids.add(profile.id)
             
             # Если нет активного профиля, берём первый
             if self.active_profile_id is None and self.profiles:
                 self.active_profile_id = self.profiles[0].id
+                changed = True
+            if self.get_profile(self.active_profile_id) is None and self.profiles:
+                self.active_profile_id = self.profiles[0].id
+                changed = True
+            if changed:
+                self._save()
         except:
             self._create_default_profiles()
     

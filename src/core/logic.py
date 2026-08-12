@@ -22,7 +22,7 @@ from src.utils.helpers import (
 
 
 class TrackerLogic:
-    def __init__(self, on_update=None, on_beep=None, on_level_up=None):
+    def __init__(self, on_update=None, on_beep=None, on_level_up=None, profile_manager=None):
         self.on_update = on_update or (lambda: None)
         self.on_beep = on_beep or (lambda f, d: None)
         self.on_level_up = on_level_up or (lambda: None)
@@ -40,8 +40,8 @@ class TrackerLogic:
         self.sound_enabled = True
         self.auto_goal_adjustment = True
 
-        # Менеджер профилей
-        self.profile_manager = ProfileManager()
+        # Менеджер профилей — используем переданный или создаём новый
+        self.profile_manager = profile_manager or ProfileManager()
         self._current_phase_duration = 0  # длительность текущей фазы в секундах
 
         # Цель на день
@@ -66,6 +66,7 @@ class TrackerLogic:
         self.current_phase = "idle"
         self.current_phase_start: Optional[float] = None
         self.current_sprint_index = 0
+        self.current_cycle = 0
         self.sprint_finished = False
         self._recording = False
 
@@ -444,6 +445,8 @@ class TrackerLogic:
         if self.current_phase != "sprint":
             return
 
+        if not self.paused:
+            self._flush_tab_time()
         self.paused = not self.paused
 
         if self.paused:
@@ -459,9 +462,8 @@ class TrackerLogic:
         if not self.session_active or self.current_phase_start is None:
             return 0.0
         elapsed = time.time() - self.current_phase_start
-        if self.paused:
-            return elapsed - self.paused_accumulated
-        return elapsed - self.paused_accumulated
+        current_pause = time.time() - self.pause_start if self.paused and self.pause_start else 0.0
+        return max(0.0, elapsed - self.paused_accumulated - current_pause)
 
     # ---------- Сессия ----------
     def start_session(self) -> None:
@@ -479,6 +481,7 @@ class TrackerLogic:
         self.current_tab = ""
         self._last_tab_poll = now
         self.current_sprint_index = 0
+        self.current_cycle = 0
         self.sprint_finished = False
         self._goal_achieved_notified = False
         self.total_goal_achieved_notified = False
@@ -498,13 +501,13 @@ class TrackerLogic:
         now = time.time()
         started = self.session_start or now
 
-        session = Session(
-            started_at=started,
-            ended_at=now,
-            points=self.session_points,
-            tab_times=dict(self.tab_times),
-        )
-        self.sessions.append(session)
+        if self.session_points > 0 or self.tab_times:
+            self.sessions.append(Session(
+                started_at=started,
+                ended_at=now,
+                points=self.session_points,
+                tab_times=dict(self.tab_times),
+            ))
 
         self.session_active = False
         self.session_start = None
@@ -512,6 +515,7 @@ class TrackerLogic:
         self.current_phase_start = None
         self.sprint_finished = False
         self.current_sprint_index = 0
+        self.current_cycle = 0
         self._recording = False
         self._sprint_warning_sent = False
         self._break_warning_sent = False
@@ -572,20 +576,7 @@ class TrackerLogic:
             if elapsed >= duration:
                 self._sprint_warning_sent = False
                 
-                # Переходим к следующей фазе из профиля
-                profile = self.profile_manager.get_active_profile()
-                if profile and self.current_sprint_index + 1 < len(profile.phases):
-                    self.current_sprint_index += 1
-                    next_phase = profile.phases[self.current_sprint_index]
-                    self._start_phase(next_phase.type)
-                else:
-                    # Если профиль закончился
-                    self.sprint_finished = True
-                    self.current_phase = "idle"
-                    self.current_phase_start = None
-                    self._recording = False
-                    self._play_warning_sound("sprint_end")
-                    self.on_update()
+                self._advance_phase()
         else:  # break
             if remaining <= 5 and remaining > 0 and not self._break_warning_sent:
                 self._break_warning_sent = True
@@ -597,20 +588,71 @@ class TrackerLogic:
             if elapsed >= duration:
                 self._break_warning_sent = False
                 
-                # Переходим к следующей фазе из профиля
-                profile = self.profile_manager.get_active_profile()
-                if profile and self.current_sprint_index + 1 < len(profile.phases):
-                    self.current_sprint_index += 1
-                    next_phase = profile.phases[self.current_sprint_index]
-                    self._start_phase(next_phase.type)
-                else:
-                    # Если профиль закончился
-                    self.sprint_finished = True
-                    self.current_phase = "idle"
-                    self.current_phase_start = None
-                    self._recording = False
-                    self._play_warning_sound("sprint_end")
-                    self.on_update()
+                self._advance_phase()
+
+    def _advance_phase(self) -> None:
+        """Перейти к следующей фазе или завершить все повторы профиля."""
+        profile = self.profile_manager.get_active_profile()
+        if not profile or not profile.phases:
+            self.sprint_finished = True
+        elif self.current_sprint_index + 1 < len(profile.phases):
+            self.current_sprint_index += 1
+            self._start_phase(profile.phases[self.current_sprint_index].type)
+            return
+        elif self.current_cycle + 1 < max(1, profile.repeat):
+            self.current_cycle += 1
+            self.current_sprint_index = 0
+            self._start_phase(profile.phases[0].type)
+            return
+        else:
+            self.sprint_finished = True
+
+        self.current_phase = "idle"
+        self.current_phase_start = None
+        self._recording = False
+        self._play_warning_sound("sprint_end")
+        self.on_update()
+
+    def restore_active_session(self, data: Dict[str, Any]) -> bool:
+        """Восстановить сохранённую сессию в паузе, чтобы не учитывать время простоя."""
+        if not data or not data.get("active") or not data.get("started_at"):
+            return False
+        phase = data.get("current_phase", "idle")
+        if phase not in ("sprint", "break"):
+            return False
+
+        self.session_active = True
+        self.session_start = float(data["started_at"])
+        self.session_points = int(data.get("points", 0))
+        self.tab_times = dict(data.get("tab_times", {}))
+        self.current_phase = phase
+        self.current_sprint_index = max(0, int(data.get("current_sprint_index", 0)))
+        self.current_cycle = max(0, int(data.get("current_cycle", 0)))
+        self.sprint_finished = bool(data.get("sprint_finished", False))
+        self.current_tab = str(data.get("current_tab", ""))
+        self._last_tab_poll = time.time()
+        self._recording = phase == "sprint" and not self.sprint_finished
+        self._current_phase_duration = self.get_phase_duration(phase, self.current_sprint_index)
+        
+        # Восстанавливаем phase_start с учётом прошедшего времени
+        saved_phase_start = data.get("phase_start")
+        if saved_phase_start:
+            elapsed_since_save = time.time() - float(saved_phase_start)
+            self.current_phase_start = time.time() - elapsed_since_save
+        else:
+            self.current_phase_start = time.time()
+        
+        # Восстанавливаем состояние паузы из сохранённых данных
+        # Если paused отсутствует в данных (старый формат), считаем что сессия была на паузе
+        self.paused = data.get("paused", True)
+        self.pause_start = data.get("pause_start")
+        self.paused_accumulated = float(data.get("paused_accumulated", 0.0))
+        
+        # Если сессия была на паузе при сохранении, ставим pause_start на "сейчас"
+        if self.paused and self.pause_start is None:
+            self.pause_start = time.time()
+        
+        return True
 
     def _update_phase_progress(self) -> tuple[Optional[str], float, float]:
         if not self.session_active or self.current_phase_start is None:
@@ -659,7 +701,7 @@ class TrackerLogic:
 
     # ---------- Вкладки ----------
     def _flush_tab_time(self) -> None:
-        if not self.session_active or not self.current_tab or not self._recording:
+        if not self.session_active or self.paused or not self.current_tab or not self._recording:
             return
         now = time.time()
         elapsed = now - self._last_tab_poll
@@ -680,8 +722,7 @@ class TrackerLogic:
             self._flush_tab_time()
             self.current_tab = tab
             self._last_tab_poll = now
-
-        self.on_update()
+            self.on_update()
 
     def get_current_productive_seconds(self) -> float:
         if not self.session_active:

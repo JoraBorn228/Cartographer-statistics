@@ -3,6 +3,7 @@
 """
 import json
 import time
+import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -27,6 +28,7 @@ def save_progress(
     goal_start_date: str,
     current_phase: str = "idle",
     current_sprint_index: int = 0,
+    current_cycle: int = 0,
     sprint_finished: bool = False,
     current_phase_start: Optional[float] = None,
     current_tab: str = "",
@@ -37,6 +39,9 @@ def save_progress(
     real_earnings: Dict[str, float] = None,
     goals: List[Dict] = None,
     active_goal_id: Optional[str] = None,
+    paused: bool = False,
+    pause_start: Optional[float] = None,
+    paused_accumulated: float = 0.0,
 ) -> None:
     """Сохранить прогресс, включая состояние активной сессии."""
     if real_earnings is None:
@@ -55,11 +60,15 @@ def save_progress(
             "tab_times": tab_times,
             "current_phase": current_phase,
             "current_sprint_index": current_sprint_index,
+            "current_cycle": current_cycle,
             "sprint_finished": sprint_finished,
             "phase_start": current_phase_start,
             "current_tab": current_tab,
             "last_tab_poll": last_tab_poll,
             "recording": recording,
+            "paused": paused,
+            "pause_start": pause_start,
+            "paused_accumulated": paused_accumulated,
         }
 
     data = {
@@ -81,7 +90,43 @@ def save_progress(
     
     # Создаём папку data, если её нет
     SAVE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SAVE_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    temp_file = SAVE_FILE.with_suffix(".tmp")
+    temp_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(temp_file, SAVE_FILE)
+
+
+def save_logic_progress(logic: Any) -> None:
+    """Сохранить всё состояние TrackerLogic без дублирования списка аргументов в UI."""
+    save_progress(
+        points=logic.points,
+        level=logic.level,
+        sprint_duration=logic.sprint_duration,
+        break_duration=logic.break_duration,
+        sprint_repeats=logic.sprint_repeats,
+        sessions=logic.sessions,
+        session_active=logic.session_active,
+        session_start=logic.session_start,
+        session_points=logic.session_points,
+        tab_times=logic.tab_times,
+        daily_goal=logic.daily_goal,
+        goal_start_date=logic.goal_start_date,
+        current_phase=logic.current_phase,
+        current_sprint_index=logic.current_sprint_index,
+        current_cycle=logic.current_cycle,
+        sprint_finished=logic.sprint_finished,
+        current_phase_start=logic.current_phase_start,
+        current_tab=logic.current_tab,
+        last_tab_poll=logic._last_tab_poll,
+        recording=logic._recording,
+        total_goal=logic.total_goal,
+        total_goal_achieved_notified=logic.total_goal_achieved_notified,
+        real_earnings=logic.real_earnings,
+        goals=logic.goals,
+        active_goal_id=logic.active_goal_id,
+        paused=logic.paused,
+        pause_start=logic.pause_start,
+        paused_accumulated=logic.paused_accumulated,
+    )
 
 
 def load_progress() -> Dict[str, Any]:
@@ -111,21 +156,21 @@ def load_progress() -> Dict[str, Any]:
         else:
             data["sessions"] = []
 
-    if "daily_goal" not in data:
+    if not isinstance(data.get("daily_goal"), (int, float)):
         data["daily_goal"] = 0
-    if "goal_start_date" not in data:
+    if not isinstance(data.get("goal_start_date"), str):
         data["goal_start_date"] = time.strftime("%Y-%m-%d")
     if "active_session" not in data:
         data["active_session"] = None
-    if "total_goal" not in data:
+    if not isinstance(data.get("total_goal"), (int, float)):
         data["total_goal"] = 0
-    if "total_goal_achieved_notified" not in data:
+    if not isinstance(data.get("total_goal_achieved_notified"), bool):
         data["total_goal_achieved_notified"] = False
-    if "real_earnings" not in data:
+    if not isinstance(data.get("real_earnings"), dict):
         data["real_earnings"] = {}
-    if "goals" not in data:
+    if not isinstance(data.get("goals"), list):
         data["goals"] = []
-    if "active_goal_id" not in data:
+    if not isinstance(data.get("active_goal_id"), (str, type(None))):
         data["active_goal_id"] = None
 
     return {
