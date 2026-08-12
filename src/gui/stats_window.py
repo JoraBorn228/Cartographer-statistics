@@ -68,6 +68,27 @@ class StatsWindow:
             )
             btn.pack(side=tk.LEFT, padx=2)
 
+        # Разделитель
+        tk.Frame(quick_frame, width=1, bg="#444", height=20).pack(side=tk.LEFT, padx=10, pady=0)
+
+        # --- Кнопки периодов выплат ---
+        tk.Label(quick_frame, text="💰 Выплаты:", fg=FG, bg=BG, font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+        
+        for label, period in [("1–15 (→ 25-го)", "first_half"), ("15–30 (→ 10-го)", "second_half")]:
+            btn = tk.Button(
+                quick_frame,
+                text=label,
+                command=lambda p=period: self._set_payout_period(p),
+                bg="#2a2a5e",
+                fg="#ffd700",
+                relief=tk.FLAT,
+                padx=8,
+                pady=2,
+                cursor="hand2",
+                font=("Segoe UI", 8, "bold")
+            )
+            btn.pack(side=tk.LEFT, padx=2)
+
         # --- Карточки быстрой статистики ---
         self._build_quick_cards()
 
@@ -332,6 +353,52 @@ class StatsWindow:
             from_date = today - timedelta(days=days_back)
             self.filter_from.set(from_date.strftime("%Y-%m-%d"))
             self.filter_to.set(today.strftime("%Y-%m-%d"))
+        self._apply_filter()
+
+    def _set_payout_period(self, period: str):
+        """Установить фильтр по периоду выплаты зарплаты.
+        
+        Период 1–15 → приходит 25-го
+        Период 15–30 → приходит 10-го
+        """
+        today = datetime.now().date()
+        current_day = today.day
+        
+        if period == "first_half":
+            # Период 1–15 числа → приходит 25-го
+            # Показываем текущий месяц с 1 по 15, или предыдущий если сейчас 15+
+            if current_day <= 15:
+                from_date = today.replace(day=1)
+                to_date = today
+            else:
+                # Уже прошли 15-е, показываем полный месяц 1–15
+                from_date = today.replace(day=1)
+                to_date = today.replace(day=15)
+        else:  # second_half
+            # Период 15–30/31 → приходит 10-го
+            if current_day >= 15:
+                from_date = today.replace(day=15)
+                to_date = today
+            else:
+                # Ещё не дошли до 15-го, показываем прошлый месяц 15–конец
+                if today.month == 1:
+                    prev_month = today.replace(year=today.year - 1, month=12)
+                else:
+                    prev_month = today.replace(month=today.month - 1)
+                
+                # Определяем последний день предыдущего месяца
+                if prev_month.month == 12:
+                    last_day = 31
+                elif prev_month.month in (4, 6, 9, 11):
+                    last_day = 30
+                else:
+                    last_day = 28 if prev_month.year % 4 != 0 or (prev_month.year % 100 == 0 and prev_month.year % 400 != 0) else 29
+                
+                to_date = prev_month.replace(day=last_day)
+                from_date = prev_month.replace(day=15)
+        
+        self.filter_from.set(from_date.strftime("%Y-%m-%d"))
+        self.filter_to.set(to_date.strftime("%Y-%m-%d"))
         self._apply_filter()
 
     # ---------- Фильтрация и сортировка ----------

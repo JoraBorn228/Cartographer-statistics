@@ -629,8 +629,17 @@
       "mode": "from_real",
       "income_source": "real",
       "created_at": 1786566441.6305237
+    },
+    {
+      "id": "1786576366.0815425",
+      "name": "Цель 4",
+      "target_amount": 30000.0,
+      "target_date": "2026-08-16",
+      "mode": "from_real",
+      "income_source": "real",
+      "created_at": 1786576366.0815425
     }
   ],
-  "goals": "1786566441.6305237",
+  "goals": "1786576366.0815425",
   "active_goal_id": null
 }
