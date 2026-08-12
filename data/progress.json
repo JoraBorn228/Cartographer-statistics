@@ -1,9 +1,9 @@
 {
   "points": 14850,
   "level": 1640,
-  "sprint_duration": 15,
-  "break_duration": 3,
-  "sprint_repeats": 8,
+  "sprint_duration": 25,
+  "break_duration": 5,
+  "sprint_repeats": 2,
   "sessions": [
     {
       "started_at": 1785709817.7548234,

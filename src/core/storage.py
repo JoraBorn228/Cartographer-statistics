@@ -36,18 +36,45 @@ def save_progress(
     recording: bool = False,
     total_goal: int = 0,
     total_goal_achieved_notified: bool = False,
-    real_earnings: Dict[str, float] = None,
-    goals: List[Dict] = None,
+    real_earnings: Optional[Dict[str, float]] = None,
+    goals: Optional[List[Dict]] = None,
     active_goal_id: Optional[str] = None,
     paused: bool = False,
     pause_start: Optional[float] = None,
     paused_accumulated: float = 0.0,
 ) -> None:
-    """Сохранить прогресс, включая состояние активной сессии."""
+    """Сохранить прогресс, включая состояние активной сессии.
+    
+    Защита: если real_earnings или goals пустые, пытаемся сохранить
+    старые значения из файла, чтобы авто-сохранение не затёрло данные.
+    """
     if real_earnings is None:
         real_earnings = {}
     if goals is None:
         goals = []
+    
+    # === ЗАЩИТА ОТ СЛУЧАЙНОГО УДАЛЕНИЯ ДАННЫХ АВТО-СОХРАНЕНИЕМ ===
+    # Если real_earnings или goals пустые, пытаемся сохранить
+    # старые значения из файла. Это защищает от ситуации, когда
+    # в памяти данные случайно очищаются, а авто-сохранение
+    # каждые 60 секунд перезаписывает файл пустыми значениями.
+    if not real_earnings and SAVE_FILE.exists():
+        try:
+            old_data = json.loads(SAVE_FILE.read_text(encoding="utf-8"))
+            old_real = old_data.get("real_earnings")
+            if isinstance(old_real, dict) and len(old_real) > 0:
+                real_earnings = old_real
+        except Exception:
+            pass
+    
+    if not goals and SAVE_FILE.exists():
+        try:
+            old_data = json.loads(SAVE_FILE.read_text(encoding="utf-8"))
+            old_goals = old_data.get("goals")
+            if isinstance(old_goals, list) and len(old_goals) > 0:
+                goals = old_goals
+        except Exception:
+            pass
     
     all_sessions = sessions.copy()
     
@@ -156,20 +183,70 @@ def load_progress() -> Dict[str, Any]:
         else:
             data["sessions"] = []
 
-    if not isinstance(data.get("daily_goal"), (int, float)):
-        data["daily_goal"] = 0
-    if not isinstance(data.get("goal_start_date"), str):
-        data["goal_start_date"] = time.strftime("%Y-%m-%d")
-    if "active_session" not in data:
-        data["active_session"] = None
+    # === МИГРАЦИЯ: восстановление перепутанных полей ===
+    # Если данные перепутались (реальные заработки попали в total_goal_achieved_notified,
+    # цели попали в real_earnings и т.д.), пытаемся восстановить их на правильные места.
+    if not isinstance(data.get("real_earnings"), dict):
+        real_earnings_value = data.get("real_earnings")
+        goals_value = data.get("goals")
+        achieved_value = data.get("total_goal_achieved_notified")
+        
+        # Проверяем, не перепутаны ли поля
+        # real_earnings должен быть dict с датами -> числа
+        # Если real_earnings — список с объектами типа "name", "target_amount" — это цели
+        # Если total_goal_achieved_notified — dict с датами -> числа — это реальные заработки
+        
+        is_real_earnings_actually_goals = (
+            isinstance(real_earnings_value, list) 
+            and len(real_earnings_value) > 0
+            and isinstance(real_earnings_value[0], dict)
+            and any(k in real_earnings_value[0] for k in ("name", "target_amount", "mode"))
+        )
+        
+        is_goals_actually_active_id = (
+            isinstance(goals_value, str)
+            and goals_value.replace(".", "").isdigit()
+        )
+        
+        is_achieved_actually_real_earnings = (
+            isinstance(achieved_value, dict)
+            and len(achieved_value) > 0
+            and any(isinstance(v, (int, float)) for v in achieved_value.values())
+            and any(k.isdigit() or "-" in str(k) for k in achieved_value.keys())
+        )
+        
+        # Если поля перепутаны — меняем их местами
+        if is_real_earnings_actually_goals:
+            if is_achieved_actually_real_earnings:
+                # Меняем real_earnings и total_goal_achieved_notified местами
+                data["real_earnings"] = achieved_value
+                data["total_goal_achieved_notified"] = False
+                print("[storage] Миграция: real_earnings и total_goal_achieved_notified перепутаны — восстановлено")
+            elif not isinstance(real_earnings_value, dict):
+                data["real_earnings"] = {}
+        
+        if is_goals_actually_active_id:
+            # goals содержит id — переносим в active_goal_id
+            data["active_goal_id"] = goals_value
+            data["goals"] = real_earnings_value if is_real_earnings_actually_goals else []
+            print(f"[storage] Миграция: goals был id '{goals_value}' — восстановлен active_goal_id")
+        elif not isinstance(goals_value, list):
+            data["goals"] = []
+        
+        # Если goals был строкой, а real_earnings был списком целей — восстанавливаем цели
+        if is_goals_actually_active_id and is_real_earnings_actually_goals:
+            data["goals"] = real_earnings_value
+        elif not isinstance(data.get("goals"), list):
+            data["goals"] = []
+    
     if not isinstance(data.get("total_goal"), (int, float)):
-        data["total_goal"] = 0
+        # Проверяем, не boolean ли это
+        if isinstance(data.get("total_goal"), bool):
+            data["total_goal"] = 0
+        else:
+            data["total_goal"] = 0
     if not isinstance(data.get("total_goal_achieved_notified"), bool):
         data["total_goal_achieved_notified"] = False
-    if not isinstance(data.get("real_earnings"), dict):
-        data["real_earnings"] = {}
-    if not isinstance(data.get("goals"), list):
-        data["goals"] = []
     if not isinstance(data.get("active_goal_id"), (str, type(None))):
         data["active_goal_id"] = None
 

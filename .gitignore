@@ -29,3 +29,7 @@ dmypy.json
 
 # Windows
 Thumbs.db
+
+# Backup files (created by restore scripts)
+*.backup
+*.bak
