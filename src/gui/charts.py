@@ -11,6 +11,8 @@ import numpy as np
 import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from src.gui.charts_service import ChartsService
+import mplcursors
 from matplotlib.figure import Figure
 from matplotlib.patches import Patch
 from matplotlib import rcParams
@@ -249,6 +251,9 @@ class ChartsWindow:
         
         self.canvas1 = FigureCanvasTkAgg(self.fig1, master=self.tab1)
         self.canvas1.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+        self.toolbar1 = NavigationToolbar2Tk(self.canvas1, self.tab1)
+        self.toolbar1.update()
+        self.toolbar1.pack(side=tk.BOTTOM, fill=tk.X)
 
         # Подключаем событие наведения
         self.canvas1.mpl_connect('motion_notify_event', self._on_bar_hover)
@@ -418,6 +423,9 @@ class ChartsWindow:
         
         self.canvas2 = FigureCanvasTkAgg(self.fig2, master=self.tab2)
         self.canvas2.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.toolbar2 = NavigationToolbar2Tk(self.canvas2, self.tab2)
+        self.toolbar2.update()
+        self.toolbar2.pack(side=tk.BOTTOM, fill=tk.X)
 
         self.canvas2.mpl_connect('motion_notify_event', self._on_gantt_hover)
         self.canvas2.mpl_connect('axes_leave_event', self._clear_gantt_annotation)
@@ -586,6 +594,9 @@ class ChartsWindow:
         
         self.canvas3 = FigureCanvasTkAgg(self.fig3, master=self.tab3)
         self.canvas3.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.toolbar3 = NavigationToolbar2Tk(self.canvas3, self.tab3)
+        self.toolbar3.update()
+        self.toolbar3.pack(side=tk.BOTTOM, fill=tk.X)
 
         self.canvas3.mpl_connect('motion_notify_event', self._on_speed_hover)
         self.canvas3.mpl_connect('axes_leave_event', self._clear_speed_annotation)
@@ -760,6 +771,9 @@ class ChartsWindow:
 
         self.canvas4 = FigureCanvasTkAgg(self.fig4, master=self.tab4)
         self.canvas4.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+        self.toolbar4 = NavigationToolbar2Tk(self.canvas4, self.tab4)
+        self.toolbar4.update()
+        self.toolbar4.pack(side=tk.BOTTOM, fill=tk.X)
 
         self._update_sprint_break_chart()
 
@@ -883,6 +897,9 @@ class ChartsWindow:
 
             self.canvas5 = FigureCanvasTkAgg(self.fig5, master=self.tab5)
             self.canvas5.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+            self.toolbar5 = NavigationToolbar2Tk(self.canvas5, self.tab5)
+            self.toolbar5.update()
+            self.toolbar5.pack(side=tk.BOTTOM, fill=tk.X)
 
         self.ax5.clear()
 
@@ -1015,6 +1032,9 @@ class ChartsWindow:
 
             self.canvas6 = FigureCanvasTkAgg(self.fig6, master=self.tab6)
             self.canvas6.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+            self.toolbar6 = NavigationToolbar2Tk(self.canvas6, self.tab6)
+            self.toolbar6.update()
+            self.toolbar6.pack(side=tk.BOTTOM, fill=tk.X)
 
         self.ax6.clear()
 
