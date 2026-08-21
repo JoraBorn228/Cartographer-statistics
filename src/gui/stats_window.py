@@ -9,7 +9,7 @@ from typing import List, Optional
 
 import matplotlib
 matplotlib.use("TkAgg")
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 from src.core.models import Session
@@ -304,9 +304,6 @@ class StatsWindow:
         self.ax.grid(True, color='#2a2a40', linestyle='--', alpha=0.3)
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=chart_frame)
-        self.toolbar_stats = NavigationToolbar2Tk(self.canvas, chart_frame)
-        self.toolbar_stats.update()
-        self.toolbar_stats.pack(side=tk.BOTTOM, fill=tk.X)
         self.canvas.get_tk_widget().pack(fill=tk.X, pady=5)
 
     def _update_mini_chart(self):

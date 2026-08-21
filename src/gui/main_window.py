@@ -375,21 +375,6 @@ class TrackerGUI:
 
         self.goal_bar_bg, self.goal_bar_fill = self._create_progress_bar(GOAL_BAR_FG)
 
-        # Общая цель
-        total_frame = tk.Frame(self.root, bg=BG)
-        total_frame.pack(fill=tk.X, padx=12, pady=(0, 4))
-
-        self.total_goal_label = tk.Label(
-            total_frame,
-            text="🏆 Общая цель: 0 / 0",
-            font=self.small_font,
-            fg=FG_SECONDARY,
-            bg=BG,
-            anchor=tk.W,
-        )
-        self.total_goal_label.pack(fill=tk.X)
-
-        self.total_goal_bar_bg, self.total_goal_bar_fill = self._create_progress_bar("#a29bfe")
 
         # Активная цель (прогноз)
         active_frame = tk.Frame(self.root, bg=BG)
@@ -423,7 +408,6 @@ class TrackerGUI:
 
         for text, cmd in [
             ("🎯 Установить цель на день", self._set_goal_dialog),
-            ("🏆 Общая цель", self._set_total_goal_dialog),
             ("📋 Управление целями", self._manage_goals),
         ]:
             btn = tk.Button(
@@ -720,7 +704,6 @@ class TrackerGUI:
         self._update_sprint_bar()
         self._update_stats_cards()
         self._update_goal_bar()
-        self._update_total_goal_bar()
         self._update_active_goal()
         self._update_speed_chart()
 
@@ -932,21 +915,6 @@ class TrackerGUI:
         else:
             self.goal_label.config(text="🎯 Цель не установлена", fg=FG_SECONDARY)
 
-    def _update_total_goal_bar(self):
-        total_goal = self.logic.total_goal
-        total_points = self.logic.points
-        progress = self.logic.get_total_goal_progress()
-        bar_w = WINDOW_W - 24
-        self.total_goal_bar_bg.coords(self.total_goal_bar_fill, 0, 0, int(bar_w * progress), 8)
-
-        if total_goal > 0:
-            remaining = self.logic.get_total_goal_remaining()
-            self.total_goal_label.config(
-                text=f"🏆 {total_points} / {total_goal}  ({int(progress*100)}%)  •  осталось {remaining}",
-                fg="#a29bfe" if progress >= 1.0 else FG,
-            )
-        else:
-            self.total_goal_label.config(text="🏆 Общая цель не установлена", fg=FG_SECONDARY)
 
     def _update_active_goal(self):
         active_goal = self.logic.get_active_goal()
@@ -1156,8 +1124,6 @@ class TrackerGUI:
             self.phase_label,
             self.goal_label,
             self.goal_bar_bg,
-            self.total_goal_label,
-            self.total_goal_bar_bg,
             self.goal_title_label,
             self.goal_progress_label,
             self.goal_bar_bg_act,

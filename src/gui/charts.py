@@ -10,7 +10,7 @@ import numpy as np
 
 import matplotlib
 matplotlib.use("TkAgg")
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from src.gui.charts_service import ChartsService
 import mplcursors
 from matplotlib.figure import Figure
@@ -91,6 +91,14 @@ class ChartsWindow:
         self.tab6 = tk.Frame(self.notebook, bg="#0f0f23")
         self.notebook.add(self.tab6, text="💵 Вирт. vs Реал.")
 
+        # Вкладка 7: Тепловая карта активности
+        self.tab7 = tk.Frame(self.notebook, bg="#0f0f23")
+        self.notebook.add(self.tab7, text="🔥 Тепловая карта")
+
+        # Вкладка 8: Среднее по дням недели
+        self.tab8 = tk.Frame(self.notebook, bg="#0f0f23")
+        self.notebook.add(self.tab8, text="📅 По дням недели")
+
         # --- Вкладка 1: Продуктивность ---
         self._build_productivity_tab()
         
@@ -108,6 +116,12 @@ class ChartsWindow:
 
         # --- Вкладка 6: Виртуальный vs Реальный ---
         self._build_virtual_real_tab()
+
+        # --- Вкладка 7: Тепловая карта ---
+        self._build_heatmap_tab()
+
+        # --- Вкладка 8: Среднее по дням недели ---
+        self._build_weekday_tab()
 
     # ---------- Шапка ----------
     def _build_header(self):
@@ -250,10 +264,7 @@ class ChartsWindow:
         self.ax1.set_facecolor("#1a1a3e")
         
         self.canvas1 = FigureCanvasTkAgg(self.fig1, master=self.tab1)
-        self.toolbar1 = NavigationToolbar2Tk(self.canvas1, self.tab1)
-        self.toolbar1.update()
-        self.toolbar1.pack(side=tk.BOTTOM, fill=tk.X)
-        self.canvas1.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 0))
+        self.canvas1.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
 
         # Подключаем событие наведения
         self.canvas1.mpl_connect('motion_notify_event', self._on_bar_hover)
@@ -422,10 +433,7 @@ class ChartsWindow:
         self.ax2.set_facecolor("#1a1a3e")
         
         self.canvas2 = FigureCanvasTkAgg(self.fig2, master=self.tab2)
-        self.toolbar2 = NavigationToolbar2Tk(self.canvas2, self.tab2)
-        self.toolbar2.update()
-        self.toolbar2.pack(side=tk.BOTTOM, fill=tk.X)
-        self.canvas2.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 0))
+        self.canvas2.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         self.canvas2.mpl_connect('motion_notify_event', self._on_gantt_hover)
         self.canvas2.mpl_connect('axes_leave_event', self._clear_gantt_annotation)
@@ -593,10 +601,7 @@ class ChartsWindow:
         self.ax3.set_facecolor("#1a1a3e")
         
         self.canvas3 = FigureCanvasTkAgg(self.fig3, master=self.tab3)
-        self.toolbar3 = NavigationToolbar2Tk(self.canvas3, self.tab3)
-        self.toolbar3.update()
-        self.toolbar3.pack(side=tk.BOTTOM, fill=tk.X)
-        self.canvas3.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 0))
+        self.canvas3.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         self.canvas3.mpl_connect('motion_notify_event', self._on_speed_hover)
         self.canvas3.mpl_connect('axes_leave_event', self._clear_speed_annotation)
@@ -770,10 +775,7 @@ class ChartsWindow:
         self.ax4.set_facecolor("#1a1a3e")
 
         self.canvas4 = FigureCanvasTkAgg(self.fig4, master=self.tab4)
-        self.toolbar4 = NavigationToolbar2Tk(self.canvas4, self.tab4)
-        self.toolbar4.update()
-        self.toolbar4.pack(side=tk.BOTTOM, fill=tk.X)
-        self.canvas4.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 0))
+        self.canvas4.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
 
         self._update_sprint_break_chart()
 
@@ -896,10 +898,7 @@ class ChartsWindow:
             self.ax5.set_facecolor("#1a1a3e")
 
             self.canvas5 = FigureCanvasTkAgg(self.fig5, master=self.tab5)
-            self.toolbar5 = NavigationToolbar2Tk(self.canvas5, self.tab5)
-            self.toolbar5.update()
-            self.toolbar5.pack(side=tk.BOTTOM, fill=tk.X)
-            self.canvas5.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 0))
+            self.canvas5.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
 
         self.ax5.clear()
 
@@ -1031,10 +1030,7 @@ class ChartsWindow:
             self.ax6.set_facecolor("#1a1a3e")
 
             self.canvas6 = FigureCanvasTkAgg(self.fig6, master=self.tab6)
-            self.toolbar6 = NavigationToolbar2Tk(self.canvas6, self.tab6)
-            self.toolbar6.update()
-            self.toolbar6.pack(side=tk.BOTTOM, fill=tk.X)
-            self.canvas6.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 0))
+            self.canvas6.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
 
         self.ax6.clear()
 
@@ -1118,3 +1114,154 @@ class ChartsWindow:
 
         self.fig6.tight_layout()
         self.canvas6.draw()
+
+    # ============================================================
+    # ВКЛАДКА 7: ТЕПЛОВАЯ КАРТА
+    # ============================================================
+    def _build_heatmap_tab(self):
+        header = tk.Frame(self.tab7, bg="#0f0f23")
+        header.pack(fill=tk.X, padx=15, pady=(10, 5))
+        tk.Label(
+            header, text="Тепловая карта продуктивности",
+            font=("Segoe UI", 12, "bold"), fg="#ff9f43", bg="#0f0f23"
+        ).pack(side=tk.LEFT)
+        tk.Label(
+            header, text="Яркость = сумма очков в этот час",
+            font=("Segoe UI", 9), fg="#666", bg="#0f0f23"
+        ).pack(side=tk.LEFT, padx=(15, 0))
+
+        self.fig7 = Figure(figsize=(12, 5), dpi=100, facecolor="#0f0f23")
+        self.ax7 = self.fig7.add_subplot(111)
+        self.ax7.set_facecolor("#1a1a3e")
+        self.canvas7 = FigureCanvasTkAgg(self.fig7, master=self.tab7)
+        self.canvas7.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+        self._update_heatmap_chart()
+
+    def _update_heatmap_chart(self):
+        import time as _t
+        self.ax7.clear()
+        days_ru = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+        grid = [[0.0] * 24 for _ in range(7)]
+
+        for sess in self.sessions:
+            lt = _t.localtime(sess.started_at)
+            wd = lt.tm_wday
+            h = lt.tm_hour
+            grid[wd][h] += sess.points
+
+        data = np.array(grid)
+        im = self.ax7.imshow(
+            data, aspect="auto", cmap="YlOrRd",
+            origin="upper", interpolation="nearest"
+        )
+        cbar = self.fig7.colorbar(im, ax=self.ax7, shrink=0.8, pad=0.01)
+        cbar.set_label("Очки", color="#888")
+        cbar.ax.yaxis.set_tick_params(color="#888")
+        plt_tick_labels = cbar.ax.get_yticklabels()
+        for lbl in plt_tick_labels:
+            lbl.set_color("#888")
+
+        self.ax7.set_xticks(range(24))
+        self.ax7.set_xticklabels([str(h) for h in range(24)], color="#888", fontsize=8)
+        self.ax7.set_yticks(range(7))
+        self.ax7.set_yticklabels(days_ru, color="#888", fontsize=10)
+        self.ax7.set_xlabel("Час дня", color="#888", fontsize=11)
+        self.ax7.set_title(
+            "Тепловая карта продуктивности (день недели × час)",
+            color="white", fontsize=13, fontweight="bold", pad=12
+        )
+        self.ax7.tick_params(colors="#888")
+        self.fig7.tight_layout()
+        self.canvas7.draw()
+
+    # ============================================================
+    # ВКЛАДКА 8: СРЕДНЕЕ ПО ДНЯМ НЕДЕЛИ
+    # ============================================================
+    def _build_weekday_tab(self):
+        header = tk.Frame(self.tab8, bg="#0f0f23")
+        header.pack(fill=tk.X, padx=15, pady=(10, 5))
+        tk.Label(
+            header, text="Среднее количество очков по дням недели",
+            font=("Segoe UI", 12, "bold"), fg="#a29bfe", bg="#0f0f23"
+        ).pack(side=tk.LEFT)
+        tk.Label(
+            header, text="По всем историческим данным",
+            font=("Segoe UI", 9), fg="#666", bg="#0f0f23"
+        ).pack(side=tk.LEFT, padx=(15, 0))
+
+        self.fig8 = Figure(figsize=(10, 6), dpi=100, facecolor="#0f0f23")
+        self.ax8 = self.fig8.add_subplot(111)
+        self.ax8.set_facecolor("#1a1a3e")
+        self.canvas8 = FigureCanvasTkAgg(self.fig8, master=self.tab8)
+        self.canvas8.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+        self._update_weekday_chart()
+
+    def _update_weekday_chart(self):
+        import time as _t
+        self.ax8.clear()
+        days_ru = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
+
+        # Собираем очки по дням недели (через daily_data чтобы не дублировать)
+        wd_totals = [0.0] * 7
+        wd_days_seen = [set() for _ in range(7)]
+
+        for sess in self.sessions:
+            lt = _t.localtime(sess.started_at)
+            wd = lt.tm_wday
+            day_key = _t.strftime("%Y-%m-%d", lt)
+            wd_days_seen[wd].add(day_key)
+
+        for wd in range(7):
+            for day_key in wd_days_seen[wd]:
+                wd_totals[wd] += self.daily_data.get(day_key, {}).get("points", 0)
+
+        avgs = [
+            wd_totals[i] / len(wd_days_seen[i]) if wd_days_seen[i] else 0
+            for i in range(7)
+        ]
+
+        max_avg = max(avgs) if any(a > 0 for a in avgs) else 1
+        colors = ["#ffd700" if (a == max_avg and max_avg > 0) else "#a29bfe" for a in avgs]
+
+        bars = self.ax8.bar(
+            range(7), avgs, color=colors, alpha=0.85,
+            edgecolor="#7c6fd4", linewidth=0.8, width=0.6
+        )
+        for bar, avg in zip(bars, avgs):
+            if avg > 0:
+                self.ax8.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + max_avg * 0.015,
+                    f"{avg:.0f}",
+                    ha="center", va="bottom",
+                    color="white", fontsize=10, fontweight="bold"
+                )
+
+        self.ax8.set_xticks(range(7))
+        self.ax8.set_xticklabels(days_ru, color="#888", fontsize=9)
+        self.ax8.set_ylabel("Среднее очков", color="#888", fontsize=11)
+        self.ax8.set_title(
+            "Среднее количество очков по дням недели",
+            color="white", fontsize=14, fontweight="bold", pad=15
+        )
+        self.ax8.tick_params(colors="#888")
+        self.ax8.grid(True, color="#2a2a40", linestyle="--", alpha=0.5, axis="y")
+        self.ax8.set_facecolor("#1a1a3e")
+        self.ax8.spines["top"].set_visible(False)
+        self.ax8.spines["right"].set_visible(False)
+        self.ax8.spines["left"].set_color("#2a2a40")
+        self.ax8.spines["bottom"].set_color("#2a2a40")
+
+        if max_avg > 0:
+            best_idx = avgs.index(max_avg)
+            best_day = days_ru[best_idx]
+            self.ax8.text(
+                0.99, 0.97, f"Лучший день: {best_day}",
+                transform=self.ax8.transAxes, ha="right", va="top",
+                color="#ffd700", fontsize=10,
+                bbox=dict(boxstyle="round,pad=0.4", facecolor="#1a1a3e",
+                          edgecolor="#ffd700", alpha=0.85)
+            )
+
+        self.fig8.tight_layout()
+        self.canvas8.draw()
