@@ -6,16 +6,18 @@ from tkinter import font as tkfont, ttk, messagebox, simpledialog
 import time
 import random
 import math
+import calendar
 from typing import Optional, List
 
 from src.core.logic import TrackerLogic
 from src.core.models import Session, Particle
-from src.core.storage import save_progress
+from src.core.storage import save_logic_progress
 from src.utils.config import (
     WINDOW_W, WINDOW_H, BG, BG_CARD, FG, FG_SECONDARY, ACCENT, ACCENT_DARK,
-    LEVEL_COLOR, COMBO_COLOR, BAR_BG, BAR_FG, GOAL_BAR_FG,
+    LEVEL_COLOR, COMBO_COLOR, BAR_BG, BAR_FG, BAR_FG_BREAK, GOAL_BAR_FG,
     BTN_BG, BTN_ACTIVE, BTN_STOP, BTN_HOVER, BG_FLASH,
     SPRINT_DURATIONS, BREAK_DURATIONS, REPEAT_OPTIONS,
+    SPEED_CHART_LINE, SPEED_CHART_FILL, SPEED_CHART_DOT,
 )
 from src.utils.helpers import (
     format_duration, format_datetime, format_points_per_hour,
@@ -71,58 +73,90 @@ class TrackerGUI:
         self._build_goal_section()
         self._build_session_controls()
         self._build_sprint_bar()
+        self._build_speed_chart()
 
     def _init_fonts(self):
-        self.big_font = tkfont.Font(family="Segoe UI", size=42, weight="bold")
+        self.big_font = tkfont.Font(family="Segoe UI", size=44, weight="bold")
         self.mid_font = tkfont.Font(family="Segoe UI", size=12, weight="bold")
         self.small_font = tkfont.Font(family="Segoe UI", size=9)
-        self.btn_font = tkfont.Font(family="Segoe UI", size=9, weight="bold")
+        self.card_value_font = tkfont.Font(family="Segoe UI", size=11, weight="bold")
+        self.btn_font = tkfont.Font(family="Segoe UI", size=10, weight="bold")
+        self.icon_btn_font = tkfont.Font(family="Segoe UI", size=11)
         self.tiny_font = tkfont.Font(family="Segoe UI", size=8)
 
     # ---------- Шапка ----------
     def _build_header(self):
         header = tk.Frame(self.root, bg=BG)
-        header.pack(fill=tk.X, padx=12, pady=(8, 4))
+        header.pack(fill=tk.X, padx=14, pady=(10, 4))
 
-        # Ранг
+        # Левая часть: ранг + время сессии
+        left = tk.Frame(header, bg=BG)
+        left.pack(side=tk.LEFT)
+
         self.rank_label = tk.Label(
-            header,
+            left,
             text="🌱 Стажёр",
             font=self.mid_font,
             fg=LEVEL_COLOR,
-            bg=BG
+            bg=BG,
         )
         self.rank_label.pack(side=tk.LEFT)
 
-        # Кнопки
+        self.session_time_label = tk.Label(
+            left,
+            text="",
+            font=self.tiny_font,
+            fg=FG_SECONDARY,
+            bg=BG,
+        )
+        self.session_time_label.pack(side=tk.LEFT, padx=(10, 0))
+
+        # Кнопки справа
         btn_frame = tk.Frame(header, bg=BG)
         btn_frame.pack(side=tk.RIGHT)
 
         buttons = [
-            ("⚙️", self.show_settings),
-            ("📊", self.show_statistics),
-            ("📈", self.show_charts),
-            ("🖥", self.toggle_floating),
-            ("💰", self.show_finance),
-            ("📋", self.show_forecast),
+            ("⚙️", self.show_settings, "Настройки"),
+            ("📊", self.show_statistics, "Статистика"),
+            ("📈", self.show_charts, "Графики"),
+            ("🖥", self.toggle_floating, "Виджет"),
+            ("💰", self.show_finance, "Финансы"),
+            ("📋", self.show_forecast, "Прогнозы"),
         ]
-        for text, cmd in buttons:
+        for text, cmd, _ in buttons:
             btn = tk.Button(
                 btn_frame,
                 text=text,
-                font=self.btn_font,
-                bg=BG,
+                font=self.icon_btn_font,
+                bg=BG_CARD,
                 fg=FG_SECONDARY,
                 activebackground=BTN_HOVER,
                 activeforeground=ACCENT,
                 relief=tk.FLAT,
                 bd=0,
-                padx=4,
-                pady=2,
+                padx=7,
+                pady=4,
                 cursor="hand2",
                 command=cmd,
             )
-            btn.pack(side=tk.LEFT, padx=(0, 2))
+            btn.pack(side=tk.LEFT, padx=2)
+            self._add_hover(btn, BG_CARD, BTN_HOVER, FG_SECONDARY, ACCENT)
+
+    @staticmethod
+    def _add_hover(widget, normal_bg, hover_bg, normal_fg=None, hover_fg=None):
+        """Добавить hover-эффект кнопке."""
+        def on_enter(_):
+            widget.configure(bg=hover_bg)
+            if hover_fg:
+                widget.configure(fg=hover_fg)
+
+        def on_leave(_):
+            widget.configure(bg=normal_bg)
+            if normal_fg:
+                widget.configure(fg=normal_fg)
+
+        widget.bind("<Enter>", on_enter)
+        widget.bind("<Leave>", on_leave)
 
     # ---------- Счётчик ----------
     def _build_counter(self):
@@ -164,27 +198,29 @@ class TrackerGUI:
 
         # 3 карточки в ряд
         self.speed_card = self._create_stat_card(cards_frame, "⚡", "Скорость", "—")
-        self.earnings_card = self._create_stat_card(cards_frame, "💰", "Заработок", "0.00 ₽")
+        self.earnings_card = self._create_earnings_card(cards_frame)
         self.goal_card = self._create_stat_card(cards_frame, "🎯", "Прогноз", "—")
 
-    def _create_stat_card(self, parent, icon, label, value_text):
+    def _create_earnings_card(self, parent):
+        """Карточка заработка с переключателем периодов."""
         card = tk.Frame(
             parent,
             bg=BG_CARD,
-            relief=tk.FLAT,
+            highlightbackground="#2a2a5e",
+            highlightthickness=1,
             bd=0,
-            padx=8,
-            pady=4,
+            padx=10,
+            pady=6,
         )
         card.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
 
-        # Иконка и заголовок
+        # Верхняя строка: иконка + заголовок + переключатель
         header = tk.Frame(card, bg=BG_CARD)
         header.pack(fill=tk.X)
 
         tk.Label(
             header,
-            text=icon,
+            text="💰",
             font=self.small_font,
             fg=ACCENT,
             bg=BG_CARD,
@@ -192,25 +228,134 @@ class TrackerGUI:
 
         tk.Label(
             header,
+            text="Заработок",
+            font=self.tiny_font,
+            fg=FG_SECONDARY,
+            bg=BG_CARD,
+        ).pack(side=tk.LEFT, padx=(3, 0))
+
+        # Переключатель периодов
+        self.earnings_period_var = tk.StringVar(value="day")  # "day" / "period" / "all"
+        self.earnings_toggle = tk.Button(
+            header,
+            text="День",
+            font=self.tiny_font,
+            fg=ACCENT,
+            bg=BAR_BG,
+            relief=tk.FLAT,
+            bd=0,
+            padx=4,
+            pady=1,
+            cursor="hand2",
+            command=self._cycle_earnings_period,
+        )
+        self.earnings_toggle.pack(side=tk.RIGHT)
+
+        # Даты периода
+        self.earnings_dates_label = tk.Label(
+            header,
+            text="",
+            font=self.tiny_font,
+            fg="#888",
+            bg=BG_CARD,
+        )
+        self.earnings_dates_label.pack(side=tk.RIGHT, padx=(4, 0))
+
+        # Нижняя строка: два значения
+        values_frame = tk.Frame(card, bg=BG_CARD)
+        values_frame.pack(fill=tk.X, pady=(2, 0))
+
+        # Слева - за день
+        self.earnings_day = tk.Label(
+            values_frame,
+            text="—",
+            font=self.card_value_font,
+            fg="#ffd700",
+            bg=BG_CARD,
+            anchor=tk.W,
+        )
+        self.earnings_day.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Разделитель
+        tk.Label(
+            values_frame,
+            text="|",
+            font=self.card_value_font,
+            fg="#444",
+            bg=BG_CARD,
+        ).pack(side=tk.LEFT, padx=4)
+
+        # Справа - за период или всё время
+        self.earnings_period = tk.Label(
+            values_frame,
+            text="—",
+            font=self.card_value_font,
+            fg="#ffd700",
+            bg=BG_CARD,
+            anchor=tk.W,
+        )
+        self.earnings_period.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+
+        return {"frame": card, "value": values_frame}
+
+    def _cycle_earnings_period(self):
+        """Переключить период: день → период → всё время."""
+        order = ["day", "period", "all"]
+        current = order.index(self.earnings_period_var.get())
+        next_val = order[(current + 1) % len(order)]
+        self.earnings_period_var.set(next_val)
+
+        labels = {"day": "День", "period": "Период", "all": "Всё время"}
+        self.earnings_toggle.config(text=labels[next_val])
+
+    def _create_stat_card(self, parent, icon, label, value_text, accent_color=None):
+        color = accent_color or ACCENT
+        wrapper = tk.Frame(parent, bg=BG, padx=0, pady=0)
+        wrapper.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        # Цветная левая полоска
+        bar = tk.Frame(wrapper, bg=color, width=3)
+        bar.pack(side=tk.LEFT, fill=tk.Y)
+
+        card = tk.Frame(
+            wrapper,
+            bg=BG_CARD,
+            highlightbackground="#1e1e4a",
+            highlightthickness=1,
+            bd=0,
+            padx=10,
+            pady=7,
+        )
+        card.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # hover-эффект на карточке
+        self._add_hover(card, BG_CARD, "#1c1c3e")
+
+        hdr = tk.Frame(card, bg=BG_CARD)
+        hdr.pack(fill=tk.X)
+
+        icon_lbl = tk.Label(hdr, text=icon, font=self.small_font, fg=color, bg=BG_CARD)
+        icon_lbl.pack(side=tk.LEFT)
+
+        tk.Label(
+            hdr,
             text=label,
             font=self.tiny_font,
             fg=FG_SECONDARY,
             bg=BG_CARD,
-        ).pack(side=tk.LEFT, padx=(2, 0))
+        ).pack(side=tk.LEFT, padx=(4, 0))
 
-        # Значение
         value = tk.Label(
             card,
             text=value_text,
-            font=self.small_font,
+            font=self.card_value_font,
             fg=FG,
             bg=BG_CARD,
             anchor=tk.W,
         )
-        value.pack(fill=tk.X, pady=(0, 2))
+        value.pack(fill=tk.X, pady=(3, 0))
 
-        # Сохраняем ссылки
-        return {"frame": card, "value": value}
+        return {"frame": card, "wrapper": wrapper, "value": value, "bar": bar}
 
     # ---------- Секция целей ----------
     def _build_goal_section(self):
@@ -291,24 +436,25 @@ class TrackerGUI:
                 activeforeground=ACCENT,
                 relief=tk.FLAT,
                 bd=0,
-                padx=6,
-                pady=2,
+                padx=8,
+                pady=3,
                 cursor="hand2",
                 command=cmd,
             )
             btn.pack(side=tk.LEFT, padx=(0, 4))
+            self._add_hover(btn, BG_CARD, BTN_HOVER)
 
     def _create_progress_bar(self, color):
         canvas = tk.Canvas(
             self.root,
             width=WINDOW_W - 24,
-            height=6,
+            height=8,
             bg=BAR_BG,
             highlightthickness=0,
             bd=0,
         )
         canvas.pack(padx=12, pady=(2, 2))
-        fill = canvas.create_rectangle(0, 0, 0, 6, fill=color, width=0)
+        fill = canvas.create_rectangle(0, 0, 0, 8, fill=color, width=0)
         return canvas, fill
 
     # ---------- Управление сессией ----------
@@ -338,14 +484,33 @@ class TrackerGUI:
             bg=BTN_ACTIVE,
             fg=BG,
             activebackground=ACCENT_DARK,
+            activeforeground=BG,
             relief=tk.FLAT,
             bd=0,
-            padx=16,
-            pady=6,
+            padx=20,
+            pady=7,
             cursor="hand2",
             command=self.logic.start_session,
         )
         self.start_btn.pack(side=tk.LEFT, padx=(0, 6))
+
+        self.pause_btn = tk.Button(
+            btn_frame,
+            text="⏸ Пауза",
+            font=self.btn_font,
+            bg="#ffd166",
+            fg=BG,
+            activebackground="#e6b84d",
+            activeforeground=BG,
+            relief=tk.FLAT,
+            bd=0,
+            padx=16,
+            pady=7,
+            cursor="hand2",
+            command=self._toggle_pause,
+            state=tk.DISABLED,
+        )
+        self.pause_btn.pack(side=tk.LEFT, padx=(0, 6))
 
         self.stop_btn = tk.Button(
             btn_frame,
@@ -354,15 +519,34 @@ class TrackerGUI:
             bg=BTN_STOP,
             fg=FG,
             activebackground="#e05555",
+            activeforeground="white",
             relief=tk.FLAT,
             bd=0,
-            padx=16,
-            pady=6,
+            padx=20,
+            pady=7,
             cursor="hand2",
             command=self.logic.stop_session,
             state=tk.DISABLED,
         )
         self.stop_btn.pack(side=tk.LEFT)
+
+        self.skip_break_btn = tk.Button(
+            btn_frame,
+            text="⏭ Скип перерыва",
+            font=self.tiny_font,
+            bg=BG_CARD,
+            fg=COMBO_COLOR,
+            activebackground=BTN_HOVER,
+            activeforeground=COMBO_COLOR,
+            relief=tk.FLAT,
+            bd=0,
+            padx=8,
+            pady=4,
+            cursor="hand2",
+            command=self._skip_break,
+            state=tk.DISABLED,
+        )
+        self.skip_break_btn.pack(side=tk.LEFT, padx=(6, 0))
 
         # Информация о вкладке
         self.tab_label = tk.Label(
@@ -377,26 +561,42 @@ class TrackerGUI:
 
     # ---------- Прогресс-бар спринта ----------
     def _build_sprint_bar(self):
-        self.sprint_bar_bg = tk.Canvas(
-            self.root,
-            width=WINDOW_W - 24,
-            height=10,
-            bg=BAR_BG,
-            highlightthickness=0,
-        )
-        self.sprint_bar_bg.pack(padx=12, pady=(4, 2))
-        self.sprint_bar_fill = self.sprint_bar_bg.create_rectangle(
-            0, 0, 0, 10, fill=BAR_FG, width=0
-        )
+        # Строка статуса и % над баром
+        status_row = tk.Frame(self.root, bg=BG)
+        status_row.pack(fill=tk.X, padx=12, pady=(4, 1))
 
         self.session_status = tk.Label(
-            self.root,
+            status_row,
             text="",
             font=self.tiny_font,
             fg=FG_SECONDARY,
             bg=BG,
+            anchor=tk.W,
         )
-        self.session_status.pack(fill=tk.X, padx=12, pady=(0, 6))
+        self.session_status.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self.sprint_pct_label = tk.Label(
+            status_row,
+            text="",
+            font=self.tiny_font,
+            fg=ACCENT,
+            bg=BG,
+            anchor=tk.E,
+        )
+        self.sprint_pct_label.pack(side=tk.RIGHT)
+
+        # Сам бар (выше 14px)
+        self.sprint_bar_bg = tk.Canvas(
+            self.root,
+            width=WINDOW_W - 24,
+            height=14,
+            bg=BAR_BG,
+            highlightthickness=0,
+        )
+        self.sprint_bar_bg.pack(padx=12, pady=(0, 6))
+        self.sprint_bar_fill = self.sprint_bar_bg.create_rectangle(
+            0, 0, 0, 14, fill=BAR_FG, width=0
+        )
 
     # ============================================================
     #  2. ДИАЛОГИ
@@ -513,6 +713,7 @@ class TrackerGUI:
     def refresh_all(self):
         self._update_counter()
         self._update_rank()
+        self._update_session_time()
         self._update_session_buttons()
         self._update_phase_label()
         self._update_tab_label()
@@ -521,6 +722,7 @@ class TrackerGUI:
         self._update_goal_bar()
         self._update_total_goal_bar()
         self._update_active_goal()
+        self._update_speed_chart()
 
     def _update_counter(self):
         today_points = self.logic.get_today_points()
@@ -529,17 +731,60 @@ class TrackerGUI:
     def _update_rank(self):
         self.rank_label.config(text=self.logic.get_rank())
 
+    def _update_session_time(self):
+        """\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u0432\u0440\u0435\u043c\u044f \u0441\u0435\u0441\u0441\u0438\u0438 \u0432 \u0448\u0430\u043f\u043a\u0435."""
+        if self.logic.session_active and self.logic.session_start:
+            elapsed = int(time.time() - self.logic.session_start)
+            h, rem = divmod(elapsed, 3600)
+            m, s = divmod(rem, 60)
+            if h:
+                txt = f"\u23f1 {h}:{m:02d}:{s:02d}"
+            else:
+                txt = f"\u23f1 {m:02d}:{s:02d}"
+            self.session_time_label.config(text=txt, fg=FG_SECONDARY)
+        else:
+            self.session_time_label.config(text="")
+
     def _update_session_buttons(self):
         if self.logic.session_active:
             self.start_btn.config(state=tk.DISABLED)
+            self.pause_btn.config(state=tk.NORMAL)
             self.stop_btn.config(state=tk.NORMAL)
+            # Кнопка скипа перерыва активна только во время перерыва
+            if self.logic.current_phase == "break" and not self.logic.paused:
+                self.skip_break_btn.config(state=tk.NORMAL)
+            else:
+                self.skip_break_btn.config(state=tk.DISABLED)
         else:
             self.start_btn.config(state=tk.NORMAL)
+            self.pause_btn.config(state=tk.DISABLED)
             self.stop_btn.config(state=tk.DISABLED)
+            self.skip_break_btn.config(state=tk.DISABLED)
+
+    def _toggle_pause(self):
+        """Переключить паузу сессии."""
+        self.logic.toggle_pause()
+        if self.logic.paused:
+            self.pause_btn.config(text="▶ Продолжить")
+            self.phase_label.config(text="⏸ Пауза", fg="#ffd166")
+        else:
+            self.pause_btn.config(text="⏸ Пауза")
+            self._update_phase_label()
+
+    def _skip_break(self):
+        """Пропустить текущий перерыв."""
+        self.logic.skip_break()
+        self._update_session_buttons()
+        self._update_phase_label()
 
     def _update_phase_label(self):
         if self.logic.session_active:
-            if self.logic.current_phase == "sprint":
+            if self.logic.paused:
+                self.phase_label.config(
+                    text="⏸ Пауза (время остановлено)",
+                    fg="#ffd166",
+                )
+            elif self.logic.current_phase == "sprint":
                 self.phase_label.config(
                     text=f"⏱ Спринт {self.logic.current_sprint_index + 1}/{self.logic.sprint_repeats}",
                     fg=ACCENT,
@@ -563,19 +808,34 @@ class TrackerGUI:
     def _update_sprint_bar(self):
         phase, remaining, progress = self.logic._update_phase_progress()
         bar_w = WINDOW_W - 24
-        self.sprint_bar_bg.coords(self.sprint_bar_fill, 0, 0, int(bar_w * progress), 10)
+        # \u0426\u0432\u0435\u0442 \u0431\u0430\u0440\u0430 \u043c\u0435\u043d\u044f\u0435\u0442\u0441\u044f \u0434\u043b\u044f \u043f\u0435\u0440\u0435\u0440\u044b\u0432\u0430
+        bar_color = BAR_FG_BREAK if phase == "break" else BAR_FG
+        self.sprint_bar_bg.itemconfig(self.sprint_bar_fill, fill=bar_color)
+        self.sprint_bar_bg.coords(self.sprint_bar_fill, 0, 0, int(bar_w * progress), 14)
 
-        if phase == "sprint":
+        pct_text = f"{int(progress * 100)}%" if phase in ("sprint", "break") else ""
+        self.sprint_pct_label.config(text=pct_text)
+
+        if self.logic.paused:
+            self.session_status.config(
+                text="\u23f8 \u041f\u0430\u0443\u0437\u0430 \u2014 \u0432\u0440\u0435\u043c\u044f \u043e\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u043e",
+                fg="#ffd166",
+            )
+        elif phase == "sprint":
             mins, secs = divmod(int(remaining), 60)
             self.session_status.config(
-                text=f"⏱ {mins:02d}:{secs:02d}  |  Точки в спринте: {self.logic.session_points}"
+                text=f"\u23f1 {mins:02d}:{secs:02d}  \u2022  \u0422\u043e\u0447\u0435\u043a \u0432 \u0441\u043f\u0440\u0438\u043d\u0442\u0435: {self.logic.session_points}",
+                fg=ACCENT,
             )
         elif phase == "break":
             mins, secs = divmod(int(remaining), 60)
-            self.session_status.config(text=f"☕ {mins:02d}:{secs:02d}  |  Следующий спринт через {mins} мин")
+            self.session_status.config(
+                text=f"\u2615 {mins:02d}:{secs:02d}  \u2022  \u041e\u0442\u0434\u044b\u0445",
+                fg=COMBO_COLOR,
+            )
         else:
-            self.sprint_bar_bg.coords(self.sprint_bar_fill, 0, 0, 0, 10)
-            self.session_status.config(text="")
+            self.sprint_bar_bg.coords(self.sprint_bar_fill, 0, 0, 0, 14)
+            self.session_status.config(text="", fg=FG_SECONDARY)
 
     def _update_stats_cards(self):
         # Скорость
@@ -599,8 +859,41 @@ class TrackerGUI:
 
         # Заработок
         today_earn = self.logic.get_today_earnings()
-        total_earn = self.logic.get_total_earnings()
-        self.earnings_card["value"].config(text=f"{today_earn:.0f} ₽ / {total_earn:.0f} ₽", fg="#ffd700")
+        self.earnings_day.config(text=f"{today_earn:.0f} ₽", fg="#ffd700")
+
+        period_earn = 0.0
+        dates_text = ""
+
+        if self.earnings_period_var.get() == "day":
+            period_earn = today_earn
+            dates_text = time.strftime("%d.%m")
+        elif self.earnings_period_var.get() == "period":
+            # Первая половина месяца (1-15) или вторая (16-30/31)
+            day = time.localtime().tm_mday
+            if day <= 15:
+                start_day, end_day = 1, 15
+                dates_text = "1 — 15"
+            else:
+                _, last_day = calendar.monthrange(time.localtime().tm_year, time.localtime().tm_mon)
+                start_day, end_day = 16, last_day
+                dates_text = f"16 — {last_day}"
+
+            # Считаем заработок за выбранный период
+            period_points = 0
+            for s in self.logic.sessions:
+                sess_date = time.strftime("%Y-%m-%d", time.localtime(s.started_at))
+                sess_day = int(sess_date.split("-")[2])
+                if start_day <= sess_day <= end_day:
+                    period_points += s.points
+            period_earn = period_points * self.logic.point_price
+        else:
+            # Всё время
+            total_earn = self.logic.get_total_earnings()
+            period_earn = total_earn
+            dates_text = "Всё время"
+
+        self.earnings_period.config(text=f"{period_earn:.0f} ₽", fg="#ffd700")
+        self.earnings_dates_label.config(text=dates_text)
 
         # Прогноз ETA
         eta_hours = self.logic.get_goal_eta()
@@ -620,7 +913,7 @@ class TrackerGUI:
         today_points = self.logic.get_today_points()
         progress = self.logic.get_daily_goal_progress()
         bar_w = WINDOW_W - 24
-        self.goal_bar_bg.coords(self.goal_bar_fill, 0, 0, int(bar_w * progress), 6)
+        self.goal_bar_bg.coords(self.goal_bar_fill, 0, 0, int(bar_w * progress), 8)
 
         if goal > 0:
             time_remaining = self.logic.get_goal_eta()
@@ -644,7 +937,7 @@ class TrackerGUI:
         total_points = self.logic.points
         progress = self.logic.get_total_goal_progress()
         bar_w = WINDOW_W - 24
-        self.total_goal_bar_bg.coords(self.total_goal_bar_fill, 0, 0, int(bar_w * progress), 6)
+        self.total_goal_bar_bg.coords(self.total_goal_bar_fill, 0, 0, int(bar_w * progress), 8)
 
         if total_goal > 0:
             remaining = self.logic.get_total_goal_remaining()
@@ -666,7 +959,7 @@ class TrackerGUI:
                 0,
                 0,
                 int(bar_w * progress_data['progress']),
-                6,
+                8,
             )
 
             name = active_goal.get('name', 'Цель')
@@ -686,9 +979,123 @@ class TrackerGUI:
                     fg=FG_SECONDARY,
                 )
         else:
-            self.goal_bar_bg_act.coords(self.goal_bar_fill_act, 0, 0, 0, 6)
+            self.goal_bar_bg_act.coords(self.goal_bar_fill_act, 0, 0, 0, 8)
             self.goal_title_label.config(text="📋 Активная цель не выбрана", fg=FG_SECONDARY)
             self.goal_progress_label.config(text="Создайте цель в окне прогнозов (📋)", fg=FG_SECONDARY)
+
+    # ---------- Мини-график скорости ----------
+    def _build_speed_chart(self):
+        """Построить Canvas для мини-графика скорости сессии."""
+        self._speed_chart_frame = tk.Frame(self.root, bg=BG)
+        # Изначально скрыт — появляется только при активной сессии
+        # (не pack сразу)
+
+        header_row = tk.Frame(self._speed_chart_frame, bg=BG)
+        header_row.pack(fill=tk.X, padx=12, pady=(4, 0))
+
+        tk.Label(
+            header_row,
+            text="⚡ Скорость сессии",
+            font=self.tiny_font,
+            fg=FG_SECONDARY,
+            bg=BG,
+            anchor=tk.W,
+        ).pack(side=tk.LEFT)
+
+        self._speed_chart_info = tk.Label(
+            header_row,
+            text="",
+            font=self.tiny_font,
+            fg=ACCENT,
+            bg=BG,
+            anchor=tk.E,
+        )
+        self._speed_chart_info.pack(side=tk.RIGHT)
+
+        chart_h = 70
+        self._speed_canvas = tk.Canvas(
+            self._speed_chart_frame,
+            width=WINDOW_W - 24,
+            height=chart_h,
+            bg="#0d0d22",
+            highlightthickness=1,
+            highlightbackground="#1e1e4a",
+        )
+        self._speed_canvas.pack(padx=12, pady=(2, 6))
+        self._speed_chart_visible = False
+
+    def _update_speed_chart(self):
+        """Обновить мини-график скорости."""
+        active = self.logic.session_active
+
+        # Показываем / скрываем фрейм
+        if active and not self._speed_chart_visible:
+            self._speed_chart_frame.pack(fill=tk.X, before=self.sprint_bar_bg)
+            self._speed_chart_visible = True
+        elif not active and self._speed_chart_visible:
+            self._speed_chart_frame.pack_forget()
+            self._speed_chart_visible = False
+
+        if not active:
+            return
+
+        history = self.logic.get_speed_history(window_minutes=30)
+        c = self._speed_canvas
+        c.delete("all")
+
+        W = WINDOW_W - 24
+        H = 70
+        pad_l, pad_r, pad_t, pad_b = 4, 4, 6, 14
+
+        plot_w = W - pad_l - pad_r
+        plot_h = H - pad_t - pad_b
+
+        # Сетка
+        for i in range(3):
+            y = pad_t + int(plot_h * i / 2)
+            c.create_line(pad_l, y, W - pad_r, y, fill="#1a1a3a", width=1)
+
+        if len(history) < 2:
+            # Нет данных — подпись
+            c.create_text(
+                W // 2, H // 2,
+                text="Данные появятся через 30 сек...",
+                fill="#444466",
+                font=("Segoe UI", 8),
+            )
+            self._speed_chart_info.config(text="")
+            return
+
+        speeds = [spd for _, spd in history]
+        max_spd = max(speeds) if max(speeds) > 0 else 1
+        min_spd = 0
+
+        def to_xy(i, spd):
+            x = pad_l + int(plot_w * i / (len(history) - 1))
+            y = pad_t + int(plot_h * (1 - (spd - min_spd) / (max_spd - min_spd + 0.001)))
+            return x, y
+
+        # Заливка под кривой
+        pts = []
+        for i, (_, spd) in enumerate(history):
+            pts.append(to_xy(i, spd))
+        poly = [pad_l, H - pad_b] + [coord for xy in pts for coord in xy] + [W - pad_r, H - pad_b]
+        c.create_polygon(poly, fill=SPEED_CHART_FILL, stipple="gray25", outline="")
+
+        # Линия
+        for i in range(len(pts) - 1):
+            c.create_line(*pts[i], *pts[i + 1], fill=SPEED_CHART_LINE, width=2, smooth=True)
+
+        # Точки
+        for x, y in pts:
+            c.create_oval(x - 2, y - 2, x + 2, y + 2, fill=SPEED_CHART_DOT, outline="")
+
+        # Метка максимума
+        c.create_text(pad_l + 2, pad_t + 2, text=f"{max_spd:.0f}", fill="#888", font=("Segoe UI", 7), anchor="nw")
+
+        # Текущая скорость в info
+        last_speed = speeds[-1]
+        self._speed_chart_info.config(text=f"сейчас {last_speed:.0f} т/ч")
 
     # ============================================================
     #  6. АНИМАЦИЯ
@@ -764,6 +1171,7 @@ class TrackerGUI:
         for card in (self.speed_card, self.earnings_card, self.goal_card):
             try:
                 card["frame"].configure(bg=bg)
+                card["frame"].configure(highlightbackground="#2a2a5e")
                 for child in card["frame"].winfo_children():
                     child.configure(bg=bg)
             except:
@@ -773,32 +1181,9 @@ class TrackerGUI:
     #  7. СОХРАНЕНИЕ И ЗАКРЫТИЕ
     # ============================================================
     def _auto_save(self):
-        save_progress(
-            self.logic.points,
-            self.logic.level,
-            self.logic.sprint_duration,
-            self.logic.break_duration,
-            self.logic.sprint_repeats,
-            self.logic.sessions,
-            self.logic.session_active,
-            self.logic.session_start,
-            self.logic.session_points,
-            self.logic.tab_times,
-            self.logic.daily_goal,
-            self.logic.goal_start_date,
-            self.logic.current_phase,
-            self.logic.current_sprint_index,
-            self.logic.sprint_finished,
-            self.logic.current_phase_start,
-            self.logic.current_tab,
-            self.logic._last_tab_poll,
-            self.logic._recording,
-            self.logic.total_goal,
-            self.logic.total_goal_achieved_notified,
-            self.logic.real_earnings,
-            self.logic.goals,
-            self.logic.active_goal_id,
-        )
+        # Используем save_logic_progress — он передаёт все поля по именам,
+        # включая current_cycle, paused, pause_start, paused_accumulated.
+        save_logic_progress(self.logic)
 
     def on_close(self):
         self.logic.close()

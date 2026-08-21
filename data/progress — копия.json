@@ -763,9 +763,8 @@
   "daily_goal": 0,
   "goal_start_date": "2026-08-21",
   "active_session": null,
-  "total_goal": 0,
-  "total_goal_achieved_notified": false,
-  "real_earnings": {
+  "total_goal": false,
+  "total_goal_achieved_notified": {
     "2026-08-08": 2242.0,
     "2026-08-07": 1463.0,
     "2026-08-06": 2498.0,
@@ -779,7 +778,7 @@
     "2026-08-19": 6100.0,
     "2026-08-18": 1500.0
   },
-  "goals": [
+  "real_earnings": [
     {
       "id": "1786877425.259549",
       "name": "Зп 10 Сентября",
@@ -799,5 +798,6 @@
       "created_at": 1786991613.003414
     }
   ],
-  "active_goal_id": "1786991613.003414"
+  "goals": "1786991613.003414",
+  "active_goal_id": null
 }

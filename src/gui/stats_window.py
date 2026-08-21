@@ -361,41 +361,30 @@ class StatsWindow:
         Период 1–15 → приходит 25-го
         Период 15–30 → приходит 10-го
         """
+        import calendar
         today = datetime.now().date()
         current_day = today.day
         
         if period == "first_half":
-            # Период 1–15 числа → приходит 25-го
-            # Показываем текущий месяц с 1 по 15, или предыдущий если сейчас 15+
             if current_day <= 15:
                 from_date = today.replace(day=1)
                 to_date = today
             else:
-                # Уже прошли 15-е, показываем полный месяц 1–15
                 from_date = today.replace(day=1)
                 to_date = today.replace(day=15)
         else:  # second_half
-            # Период 15–30/31 → приходит 10-го
             if current_day >= 15:
                 from_date = today.replace(day=15)
                 to_date = today
             else:
-                # Ещё не дошли до 15-го, показываем прошлый месяц 15–конец
+                # Предыдущий месяц
                 if today.month == 1:
-                    prev_month = today.replace(year=today.year - 1, month=12)
+                    prev_year, prev_month = today.year - 1, 12
                 else:
-                    prev_month = today.replace(month=today.month - 1)
-                
-                # Определяем последний день предыдущего месяца
-                if prev_month.month == 12:
-                    last_day = 31
-                elif prev_month.month in (4, 6, 9, 11):
-                    last_day = 30
-                else:
-                    last_day = 28 if prev_month.year % 4 != 0 or (prev_month.year % 100 == 0 and prev_month.year % 400 != 0) else 29
-                
-                to_date = prev_month.replace(day=last_day)
-                from_date = prev_month.replace(day=15)
+                    prev_year, prev_month = today.year, today.month - 1
+                _, last_day = calendar.monthrange(prev_year, prev_month)
+                from_date = today.replace(year=prev_year, month=prev_month, day=15)
+                to_date = today.replace(year=prev_year, month=prev_month, day=last_day)
         
         self.filter_from.set(from_date.strftime("%Y-%m-%d"))
         self.filter_to.set(to_date.strftime("%Y-%m-%d"))
@@ -606,17 +595,34 @@ class StatsWindow:
     def _on_card_click(self, session: Session):
         self.selected_session = session
         self._show_details(session)
-        for frame in self.card_frames:
-            frame.configure(bg="#2a2a40")
-            for child in frame.winfo_children():
-                child.configure(bg="#2a2a40")
+
+        # Сбрасываем выделение всех карточек, сохраняя цвет "рекордных"
+        max_pts = max((s.points for s in self.filtered_sessions), default=0)
         for idx, sess in enumerate(self.filtered_sessions):
-            if sess == session:
+            if idx >= len(self.card_frames):
+                break
+            card = self.card_frames[idx]
+            is_best = sess.points == max_pts and max_pts > 0
+            default_bg = "#1a3a2e" if is_best else "#2a2a40"
+            card.configure(bg=default_bg)
+            for child in card.winfo_children():
+                try:
+                    child.configure(bg=default_bg)
+                except tk.TclError:
+                    pass
+
+        # Подсвечиваем выбранную
+        for idx, sess in enumerate(self.filtered_sessions):
+            if sess == session and idx < len(self.card_frames):
+                is_best = sess.points == max_pts and max_pts > 0
                 card = self.card_frames[idx]
-                is_best = sess.points == max(s.points for s in self.filtered_sessions) if self.filtered_sessions else False
-                card.configure(bg="#1a3a2e" if is_best else "#3d3d6b")
+                selected_bg = "#1a4a3e" if is_best else "#3d3d6b"
+                card.configure(bg=selected_bg)
                 for child in card.winfo_children():
-                    child.configure(bg="#1a3a2e" if is_best else "#3d3d6b")
+                    try:
+                        child.configure(bg=selected_bg)
+                    except tk.TclError:
+                        pass
                 break
 
     # ---------- Детали ----------

@@ -34,7 +34,12 @@ class FinanceWindow:
     
     def _load_real_earnings(self) -> Dict[str, float]:
         if hasattr(self.logic, 'real_earnings'):
-            return self.logic.real_earnings
+            re = self.logic.real_earnings
+            # Если real_earnings — список (цели попали туда), возвращаем пустой словарь
+            if isinstance(re, list):
+                return {}
+            if isinstance(re, dict):
+                return re
         return {}
     
     def _save_real_earnings(self):

@@ -85,6 +85,10 @@ class ChartsWindow:
         self.tab5 = tk.Frame(self.notebook, bg="#0f0f23")
         self.notebook.add(self.tab5, text="🏆 Лучшие дни и пики")
 
+        # Вкладка 6: Виртуальный vs Реальный
+        self.tab6 = tk.Frame(self.notebook, bg="#0f0f23")
+        self.notebook.add(self.tab6, text="💵 Вирт. vs Реал.")
+
         # --- Вкладка 1: Продуктивность ---
         self._build_productivity_tab()
         
@@ -99,6 +103,9 @@ class ChartsWindow:
 
         # --- Вкладка 5: Лучшие дни и пики ---
         self._build_best_days_tab()
+
+        # --- Вкладка 6: Виртуальный vs Реальный ---
+        self._build_virtual_real_tab()
 
     # ---------- Шапка ----------
     def _build_header(self):
@@ -971,3 +978,123 @@ class ChartsWindow:
 
         self.fig5.tight_layout()
         self.canvas5.draw()
+
+    # ============================================================
+    # ВКЛАДКА 6: ВИРТУАЛЬНЫЙ vs РЕАЛЬНЫЙ ЗАРАБОТОК
+    # ============================================================
+    def _build_virtual_real_tab(self):
+        """Сравнение виртуального и реального заработка (после налога)."""
+        # Заголовок
+        header_frame = tk.Frame(self.tab6, bg="#0f0f23")
+        header_frame.pack(fill=tk.X, padx=15, pady=(10, 5))
+
+        tk.Label(
+            header_frame,
+            text="💵 Виртуальный vs Реальный заработок",
+            font=("Segoe UI", 12, "bold"),
+            fg="#ffd700",
+            bg="#0f0f23"
+        ).pack(side=tk.LEFT)
+
+        tk.Label(
+            header_frame,
+            text="Реальный считается после вычета налога 13%",
+            font=("Segoe UI", 9),
+            fg="#888",
+            bg="#0f0f23"
+        ).pack(side=tk.LEFT, padx=(15, 0))
+
+        self._update_virtual_real_chart()
+
+    def _update_virtual_real_chart(self):
+        """Обновить график сравнения виртуального и реального заработка."""
+        if not hasattr(self, 'fig6'):
+            self.fig6 = Figure(figsize=(10, 6), dpi=100, facecolor="#0f0f23")
+            self.ax6 = self.fig6.add_subplot(111)
+            self.ax6.set_facecolor("#1a1a3e")
+
+            self.canvas6 = FigureCanvasTkAgg(self.fig6, master=self.tab6)
+            self.canvas6.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+
+        self.ax6.clear()
+
+        if not self.daily_data:
+            self.ax6.text(0.5, 0.5, "Нет данных", ha='center', va='center',
+                         color='#888', fontsize=14, fontweight='bold')
+            self.ax6.set_facecolor('#1a1a3e')
+            self.canvas6.draw()
+            return
+
+        dates = sorted(self.daily_data.keys())
+        x = list(range(len(dates)))
+
+        # Виртуальный заработок (точки × цена)
+        virtual_earnings = [self.daily_data[d]['money'] for d in dates]
+
+        # Реальный заработок (с вычетом налога 13%)
+        real_earnings = getattr(self.logic, 'real_earnings', {})
+        real_values = []
+        for d in dates:
+            real_val = real_earnings.get(d, 0.0)
+            # Вычитаем налог 13%
+            real_after_tax = real_val * 0.87 if real_val > 0 else 0.0
+            real_values.append(real_after_tax)
+
+        differences = [v - r for v, r in zip(virtual_earnings, real_values)]
+
+        # Виртуальный заработок
+        self.ax6.plot(x, virtual_earnings, 'o-', color='#00d4aa',
+                     linewidth=2.5, markersize=8, label='Виртуальный (очк. × цена)',
+                     alpha=0.9)
+        self.ax6.fill_between(x, 0, virtual_earnings, color='#00d4aa', alpha=0.1)
+
+        # Реальный заработок
+        self.ax6.plot(x, real_values, 's-', color='#ff6b6b',
+                     linewidth=2.5, markersize=8, label='Реальный (после налога 13%)',
+                     alpha=0.9)
+        self.ax6.fill_between(x, 0, real_values, color='#ff6b6b', alpha=0.1)
+
+        # Соединяем разницу
+        for i, (v, r) in enumerate(zip(virtual_earnings, real_values)):
+            if abs(v - r) > 10:
+                color = '#00d4aa' if v > r else '#ff6b6b'
+                self.ax6.plot([i, i], [r, v], '-', color=color, linewidth=3, alpha=0.6)
+
+        # Настройки
+        self.ax6.set_xlabel("Дата", color='#888', fontsize=11)
+        self.ax6.set_ylabel("Рубли (₽)", color='#888', fontsize=11)
+        self.ax6.set_title("💵 Виртуальный vs Реальный заработок",
+                          color='white', fontsize=14, fontweight='bold', pad=15)
+        self.ax6.tick_params(colors='#888', labelsize=9)
+        self.ax6.grid(True, color='#2a2a40', linestyle='--', alpha=0.5)
+        self.ax6.set_facecolor('#1a1a3e')
+
+        self.ax6.spines['top'].set_visible(False)
+        self.ax6.spines['right'].set_visible(False)
+        self.ax6.spines['left'].set_color('#2a2a40')
+        self.ax6.spines['bottom'].set_color('#2a2a40')
+
+        self.ax6.set_xticks(x)
+        self.ax6.set_xticklabels(dates, rotation=45, ha='right', color='#888', fontsize=8)
+
+        # Статистика разницы
+        avg_diff = sum(differences) / len(differences) if differences else 0
+        max_diff = max(abs(d) for d in differences) if differences else 0
+        diff_text = f"📊 Средняя разница: {avg_diff:+.0f}₽  |  Макс.: {max_diff:.0f}₽  |  💡 Реальный: после вычета налога 13%"
+
+        self.ax6.text(
+            0.5, -0.08, diff_text,
+            transform=self.ax6.transAxes,
+            ha='center', va='top',
+            color='#ffd166', fontsize=9,
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='#1a1a3e',
+                     edgecolor='#ffd166', alpha=0.8)
+        )
+
+        legend = self.ax6.legend(loc='upper left', facecolor='#1a1a3e',
+                                labelcolor='white', edgecolor='#2a2a40',
+                                fontsize=10, framealpha=0.9)
+        legend.get_frame().set_linewidth(0)
+
+        self.fig6.tight_layout()
+        self.canvas6.draw()

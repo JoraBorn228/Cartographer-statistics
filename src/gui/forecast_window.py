@@ -297,20 +297,38 @@ class ForecastWindow:
         
         # Добавляем текущую сессию
         if self.logic.session_active and self.logic.session_points > 0:
-            today = time.strftime("%Y-%m-%d")
+            today = time.strftime("%Y-%m-%d", time.localtime())
             if today not in daily_data:
                 daily_data[today] = {'points': 0, 'hours': 0.0}
             daily_data[today]['points'] += self.logic.session_points
         
-        # Считаем реальный и приблизительный доход (только дни с реальными данными)
+        # Фильтр: только дни текущего периода (1-15 или 16-31)
+        period_days = self.logic._get_current_period_days() if hasattr(self.logic, '_get_current_period_days') else None
+        
+        real_earnings = getattr(self.logic, 'real_earnings', {})
+        if not isinstance(real_earnings, dict):
+            real_earnings = {}
+        point_price = self.logic.point_price
+        
+        # === ЗАРАБОТАНО ЗА ТЕКУЩИЙ ПЕРИОД (для вычитания из цели) ===
         total_real_after_tax = 0.0
-        total_approx = 0.0
+        approx_by_real_days = 0.0
+        
+        for day, data in daily_data.items():
+            if period_days is not None and day not in period_days:
+                continue
+            real = real_earnings.get(day, 0.0)
+            real_after_tax = real * (1 - self.tax_rate) if real > 0 else 0.0
+            if real_after_tax > 0:
+                total_real_after_tax += real_after_tax
+            # Приблизительный заработок: ВСЕ точки периода × цена
+            approx_by_real_days += data['points'] * point_price
+        
+        # === СРЕДНИЕ ПО ВСЕМ ДАННЫМ (для прогноза скорости/дохода) ===
         total_points = 0
         total_hours = 0.0
         days_with_data = 0
-        
-        real_earnings = getattr(self.logic, 'real_earnings', {})
-        point_price = self.logic.point_price
+        total_real_all = 0.0
         
         for day, data in daily_data.items():
             real = real_earnings.get(day, 0.0)
@@ -318,23 +336,17 @@ class ForecastWindow:
             
             # Учитываем только дни с реальными данными
             if real_after_tax > 0 and data['hours'] > 0:
-                total_real_after_tax += real_after_tax
+                total_real_all += real_after_tax
                 total_points += data['points']
                 total_hours += data['hours']
                 days_with_data += 1
         
-        # Приблизительный доход считаем только для дней с реальными данными
-        approx_by_real_days = 0.0
-        for day in real_earnings.keys():
-            if day in daily_data:
-                approx_by_real_days += daily_data[day]['points'] * point_price
-        
         # Установленная цена пользователем
         user_price = self.logic.point_price
         
-        # Средние показатели (только по дням с реальными данными)
-        avg_hourly_real = total_real_after_tax / total_hours if total_hours > 0 else 0
-        avg_daily_real = total_real_after_tax / days_with_data if days_with_data > 0 else 0
+        # Средние показатели (по всем данным)
+        avg_hourly_real = total_real_all / total_hours if total_hours > 0 else 0
+        avg_daily_real = total_real_all / days_with_data if days_with_data > 0 else 0
         
         total_user_income = total_points * user_price
         avg_hourly_user = total_user_income / total_hours if total_hours > 0 else 0

@@ -4,8 +4,8 @@
 from pathlib import Path
 
 # --- Размеры окна ---
-WINDOW_W = 440
-WINDOW_H = 520
+WINDOW_W = 520
+WINDOW_H = 620
 
 # --- Файл сохранения ---
 SAVE_FILE = Path(__file__).parent.parent.parent / "data" / "progress.json"
@@ -41,11 +41,15 @@ LEVEL_COLOR = "#ff6b6b"
 COMBO_COLOR = "#ffd166"
 BAR_BG = "#1a1a3e"
 BAR_FG = "#00d4aa"
+BAR_FG_BREAK = "#ffd166"
 GOAL_BAR_FG = "#ffd166"
 BTN_BG = "#1a1a3e"
 BTN_ACTIVE = "#00d4aa"
-BTN_STOP = "#ff6b6b"
+BTN_STOP = "#c0392b"
 BTN_HOVER = "#2a2a5e"
+SPEED_CHART_LINE = "#00d4aa"
+SPEED_CHART_FILL = "#00d4aa"
+SPEED_CHART_DOT = "#ffd166"
 PARTICLE_COLORS = ("#00d4aa", "#ffd166", "#ff6b6b", "#4ecdc4", "#a29bfe")
 
 # --- Суффиксы браузеров для парсинга заголовка окна ---

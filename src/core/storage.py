@@ -156,14 +156,33 @@ def save_logic_progress(logic: Any) -> None:
     )
 
 
-def load_progress() -> Dict[str, Any]:
-    """Загрузить прогресс."""
-    if not SAVE_FILE.exists():
-        return {}
+def _safe_sessions_from_list(data_list: list) -> list:
+    """Парсим сессии по одной — битая запись не роняет весь список."""
+    from src.core.models import Session
+    result = []
+    for item in data_list:
+        try:
+            result.append(Session.from_dict(item))
+        except Exception:
+            pass
+    return result
 
-    try:
-        data = json.loads(SAVE_FILE.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+
+def load_progress() -> Dict[str, Any]:
+    """Загрузить прогресс. При ошибке чтения пробует .backup файл."""
+    def _read_file(path: Path):
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+            return None
+
+    data = _read_file(SAVE_FILE)
+    if data is None:
+        backup = SAVE_FILE.with_suffix(".json.backup")
+        data = _read_file(backup)
+    if data is None:
         return {}
 
     # Миграция старых данных
@@ -256,7 +275,7 @@ def load_progress() -> Dict[str, Any]:
         "sprint_duration": int(data.get("sprint_duration", 15)),
         "break_duration": int(data.get("break_duration", 5)),
         "sprint_repeats": int(data.get("sprint_repeats", 1)),
-        "sessions": sessions_from_list(data.get("sessions", [])),
+        "sessions": _safe_sessions_from_list(data.get("sessions", [])),
         "daily_goal": int(data.get("daily_goal", 0)),
         "goal_start_date": data.get("goal_start_date", time.strftime("%Y-%m-%d")),
         "active_session": data.get("active_session"),

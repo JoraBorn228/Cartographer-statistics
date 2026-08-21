@@ -84,7 +84,7 @@ class ProfileManager:
                 changed = True
             if changed:
                 self._save()
-        except:
+        except Exception:
             self._create_default_profiles()
     
     def _save(self):

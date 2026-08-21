@@ -95,6 +95,10 @@ class TrackerLogic:
         self.goals: List[Dict] = []
         self.active_goal_id: Optional[str] = None
 
+        # История скорости внутри сессии: список (timestamp, points_per_hour)
+        self.speed_history: List[tuple] = []
+        self._last_speed_snapshot = 0.0  # время последнего снимка
+
         # Применяем активный профиль при старте
         self._apply_profile()
 
@@ -319,6 +323,30 @@ class TrackerLogic:
                 return goal
         return None
 
+    def _get_current_period_days(self):
+        """Возвращает дни текущего периода (1-15 или 16-конец месяца)."""
+        import calendar
+        import datetime
+        now = time.localtime()
+        year, month, day = now.tm_year, now.tm_mon, now.tm_mday
+        
+        if day <= 15:
+            start_day, end_day = 1, 15
+        else:
+            _, last_day = calendar.monthrange(year, month)
+            start_day, end_day = 16, last_day
+        
+        # Собираем все даты в этом периоде за текущий месяц
+        period_days = set()
+        for d in range(start_day, end_day + 1):
+            try:
+                dt = datetime.date(year, month, d)
+                period_days.add(dt.strftime("%Y-%m-%d"))
+            except ValueError:
+                pass
+        
+        return period_days
+
     def _calculate_goal_stats(self):
         daily_data = {}
         for sess in self.sessions:
@@ -329,35 +357,47 @@ class TrackerLogic:
             daily_data[day]['hours'] += get_productive_tab_time(sess.tab_times) / 3600.0
         
         if self.session_active and self.session_points > 0:
-            today = time.strftime("%Y-%m-%d")
+            today = time.strftime("%Y-%m-%d", time.localtime())
             if today not in daily_data:
                 daily_data[today] = {'points': 0, 'hours': 0.0}
             daily_data[today]['points'] += self.session_points
         
+        # Получаем дни текущего периода
+        period_days = self._get_current_period_days()
+        
+        real_earnings = getattr(self, 'real_earnings', {})
+        if not isinstance(real_earnings, dict):
+            real_earnings = {}
+        point_price = self.point_price
+        tax_rate = 0.13
+        
+        # === ЗАРАБОТАНО ЗА ТЕКУЩИЙ ПЕРИОД (для вычитания из цели) ===
         total_real_after_tax = 0.0
-        total_approx = 0.0
+        approx_by_real_days = 0.0
+        
+        for day, data in daily_data.items():
+            if day not in period_days:
+                continue
+            real = real_earnings.get(day, 0.0)
+            real_after_tax = real * (1 - tax_rate) if real > 0 else 0.0
+            if real_after_tax > 0:
+                total_real_after_tax += real_after_tax
+            # Приблизительный заработок: ВСЕ точки периода × цена
+            approx_by_real_days += data['points'] * point_price
+        
+        # === СРЕДНИЕ ПО ВСЕМ ДАННЫМ (для прогноза скорости/дохода) ===
         total_points = 0
         total_hours = 0.0
         days_with_data = 0
-        
-        real_earnings = getattr(self, 'real_earnings', {})
-        point_price = self.point_price
-        tax_rate = 0.13
         
         for day, data in daily_data.items():
             real = real_earnings.get(day, 0.0)
             real_after_tax = real * (1 - tax_rate) if real > 0 else 0.0
             
             if real_after_tax > 0 and data['hours'] > 0:
-                total_real_after_tax += real_after_tax
                 total_points += data['points']
                 total_hours += data['hours']
                 days_with_data += 1
-        
-        approx_by_real_days = 0.0
-        for day in real_earnings.keys():
-            if day in daily_data:
-                approx_by_real_days += daily_data[day]['points'] * point_price
         
         avg_daily_real = total_real_after_tax / days_with_data if days_with_data > 0 else 0
         avg_daily_user = (total_points * point_price) / days_with_data if days_with_data > 0 else 0
@@ -420,23 +460,28 @@ class TrackerLogic:
     def _play_warning_sound(self, pattern: str = "short"):
         if not self.sound_enabled:
             return
-        try:
-            import winsound
-            import time
-            if pattern == "short":
-                winsound.Beep(880, 150)
-                time.sleep(0.1)
-                winsound.Beep(880, 150)
-            elif pattern == "long":
-                winsound.Beep(440, 300)
-                time.sleep(0.15)
-                winsound.Beep(660, 300)
-            elif pattern == "sprint_end":
-                winsound.Beep(880, 200)
-                time.sleep(0.1)
-                winsound.Beep(660, 200)
-        except Exception:
-            pass
+        import threading
+
+        def _beep():
+            try:
+                import winsound
+                import time as _time
+                if pattern == "short":
+                    winsound.Beep(880, 150)
+                    _time.sleep(0.1)
+                    winsound.Beep(880, 150)
+                elif pattern == "long":
+                    winsound.Beep(440, 300)
+                    _time.sleep(0.15)
+                    winsound.Beep(660, 300)
+                elif pattern == "sprint_end":
+                    winsound.Beep(880, 200)
+                    _time.sleep(0.1)
+                    winsound.Beep(660, 200)
+            except Exception:
+                pass
+
+        threading.Thread(target=_beep, daemon=True).start()
 
     # ---------- Пауза ----------
     def toggle_pause(self) -> None:
@@ -490,6 +535,8 @@ class TrackerLogic:
         self.paused = False
         self.pause_start = None
         self.paused_accumulated = 0.0
+        self.speed_history = []
+        self._last_speed_snapshot = now
 
         self._start_phase("sprint")
         self.on_update()
@@ -613,6 +660,14 @@ class TrackerLogic:
         self._play_warning_sound("sprint_end")
         self.on_update()
 
+    def skip_break(self) -> None:
+        """Пропустить текущий перерыв и перейти к следующей фазе."""
+        if not self.session_active:
+            return
+        if self.current_phase != "break":
+            return
+        self._advance_phase()
+
     def restore_active_session(self, data: Dict[str, Any]) -> bool:
         """Восстановить сохранённую сессию в паузе, чтобы не учитывать время простоя."""
         if not data or not data.get("active") or not data.get("started_at"):
@@ -728,7 +783,8 @@ class TrackerLogic:
         if not self.session_active:
             return 0.0
         productive = get_productive_tab_time(self.tab_times)
-        if self._recording and self.current_tab and is_productive_tab(self.current_tab):
+        # Не добавляем текущий незафлашенный отрезок если на паузе
+        if not self.paused and self._recording and self.current_tab and is_productive_tab(self.current_tab):
             now = time.time()
             elapsed = now - self._last_tab_poll
             if elapsed > 0:
@@ -780,7 +836,35 @@ class TrackerLogic:
         if self.session_active and self.current_phase != "idle":
             self._check_phase_complete()
 
+        # Записываем снимок скорости каждые 30 секунд во время спринта
+        if (self.session_active and self.current_phase == "sprint"
+                and not self.paused
+                and time.time() - self._last_speed_snapshot >= 30):
+            self.record_speed_snapshot()
+
         self.on_update()
+
+    # ---------- История скорости ----------
+    def record_speed_snapshot(self) -> None:
+        """3аписать текущую скорость в историю."""
+        prod_secs = self.get_current_productive_seconds()
+        if prod_secs > 0 and self.session_points > 0:
+            speed = self.session_points / (prod_secs / 3600)
+            self.speed_history.append((time.time(), speed))
+        elif self.session_points == 0:
+            # Даже без точек запишем нуль, чтобы график начинался с 0
+            self.speed_history.append((time.time(), 0.0))
+        self._last_speed_snapshot = time.time()
+        # Храним не больше 120 снимков (1 час при интервале 30с)
+        if len(self.speed_history) > 120:
+            self.speed_history = self.speed_history[-120:]
+
+    def get_speed_history(self, window_minutes: float = 30.0) -> List[tuple]:
+        """Vернуть снимки скорости за последние window_minutes минут."""
+        if not self.speed_history:
+            return []
+        cutoff = time.time() - window_minutes * 60
+        return [(ts, spd) for ts, spd in self.speed_history if ts >= cutoff]
 
     def close(self) -> None:
         self._closing = True

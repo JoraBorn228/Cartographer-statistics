@@ -37,7 +37,7 @@
         },
         {
           "type": "break",
-          "duration": 5
+          "duration": 3
         },
         {
           "type": "sprint",
@@ -45,10 +45,10 @@
         },
         {
           "type": "break",
-          "duration": 5
+          "duration": 3
         }
       ],
-      "repeat": 1
+      "repeat": 2
     },
     {
       "id": "d9db06e4-ab4a-4aef-a0cb-025c3b1aef61",
@@ -122,34 +122,6 @@
         },
         {
           "type": "break",
-          "duration": 30
-        },
-        {
-          "type": "sprint",
-          "duration": 15
-        },
-        {
-          "type": "break",
-          "duration": 3
-        },
-        {
-          "type": "sprint",
-          "duration": 15
-        },
-        {
-          "type": "break",
-          "duration": 3
-        },
-        {
-          "type": "sprint",
-          "duration": 15
-        },
-        {
-          "type": "break",
-          "duration": 3
-        },
-        {
-          "type": "sprint",
           "duration": 15
         }
       ],

@@ -240,6 +240,82 @@ class SettingsWindow:
         self._add_field(card, "Интервал автосохранения (сек)", self.auto_save_var, "entry")
 
         # ============================================================
+        # ГОРЯЧАЯ КЛАВИША И КЛИК
+        # ============================================================
+        card = self._add_card(content, "🖱 Горячая клавиша и клик")
+
+        tk.Label(
+            card,
+            text="Нажми «Указать» и кликни мышкой на экран, чтобы выбрать точку для клика",
+            fg=FG_SECONDARY,
+            bg=BG_CARD,
+            font=_FONT_HINT,
+        ).pack(anchor=tk.W, padx=12, pady=(8, 6))
+
+        hk_frame = tk.Frame(card, bg=BG_CARD)
+        hk_frame.pack(fill=tk.X, padx=12, pady=6)
+
+        tk.Label(
+            hk_frame,
+            text="X:",
+            fg=FG,
+            bg=BG_CARD,
+            font=_FONT_LABEL,
+        ).pack(side=tk.LEFT, padx=(0, 2))
+
+        self.click_x_var = tk.StringVar(value=str(self.settings.get("click_x", 500)))
+        ttk.Entry(
+            hk_frame, textvariable=self.click_x_var,
+            width=6, style="Settings.TEntry",
+        ).pack(side=tk.LEFT, padx=(0, 8))
+
+        tk.Label(
+            hk_frame,
+            text="Y:",
+            fg=FG,
+            bg=BG_CARD,
+            font=_FONT_LABEL,
+        ).pack(side=tk.LEFT, padx=(0, 2))
+
+        self.click_y_var = tk.StringVar(value=str(self.settings.get("click_y", 500)))
+        ttk.Entry(
+            hk_frame, textvariable=self.click_y_var,
+            width=6, style="Settings.TEntry",
+        ).pack(side=tk.LEFT, padx=(0, 12))
+
+        tk.Label(
+            hk_frame,
+            text="Горячая:",
+            fg=FG,
+            bg=BG_CARD,
+            font=_FONT_LABEL,
+        ).pack(side=tk.LEFT, padx=(0, 2))
+
+        self.hotkey_var = tk.StringVar(value=self.settings.get("click_hotkey", "ctrl+shift+f"))
+        self.hotkey_entry = ttk.Entry(
+            hk_frame, textvariable=self.hotkey_var,
+            width=12, style="Settings.TEntry",
+        )
+        self.hotkey_entry.pack(side=tk.LEFT, padx=(0, 8))
+
+        self.pick_btn = self._make_button(
+            hk_frame,
+            text="📍 Указать",
+            command=self._pick_click_point,
+            primary=True,
+        )
+        self.pick_btn.pack(side=tk.LEFT)
+
+        self.pick_status = tk.Label(
+            card,
+            text="Готово к выбору",
+            fg=FG_SECONDARY,
+            bg=BG_CARD,
+            font=_FONT_HINT,
+        )
+        self.pick_status.pack(anchor=tk.W, padx=12, pady=(4, 8))
+
+        # ============================================================
         # ЗВУКИ
         # ============================================================
         card = self._add_card(content, "🔊 Звуки")
@@ -477,6 +553,56 @@ class SettingsWindow:
         except Exception as e:
             print(f"Ошибка при открытии редактора профилей: {e}")
 
+    def _pick_click_point(self):
+        """Режим выбора точки клика мышкой (в отдельном потоке, не блокирует UI)."""
+        import threading
+        try:
+            from pynput.mouse import Listener
+        except ImportError:
+            self.pick_status.config(text="❌ Нет pynput: pip install pynput", fg="#ff6b6b")
+            return
+
+        self.pick_status.config(text="👆 Кликни мышкой где угодно на экране...", fg=ACCENT)
+        self.pick_btn.config(text="⏳ Выбор...", state=tk.DISABLED)
+        self.window.attributes('-alpha', 0.3)
+
+        picked = {"x": None, "y": None}
+
+        def _listen():
+            def on_click(x, y, button, pressed):
+                if pressed:
+                    picked["x"] = int(x)
+                    picked["y"] = int(y)
+                    return False  # Остановить слушатель
+
+            with Listener(on_click=on_click) as listener:
+                listener.join()
+
+            # Передаём результат в главный поток через after
+            try:
+                if self.window.winfo_exists():
+                    self.window.after(0, _on_done)
+            except Exception:
+                pass
+
+        def _on_done():
+            try:
+                self.window.attributes('-alpha', 1.0)
+                self.pick_btn.config(text="📍 Указать", state=tk.NORMAL)
+                if picked["x"] is not None:
+                    self.click_x_var.set(str(picked["x"]))
+                    self.click_y_var.set(str(picked["y"]))
+                    self.pick_status.config(
+                        text=f"✅ Выбрано: ({picked['x']}, {picked['y']})",
+                        fg="#4ecdc4",
+                    )
+                else:
+                    self.pick_status.config(text="❌ Выбор отменён", fg="#ff6b6b")
+            except Exception:
+                pass
+
+        threading.Thread(target=_listen, daemon=True).start()
+
     def _save_settings(self):
         try:
             new_settings = {
@@ -487,6 +613,9 @@ class SettingsWindow:
                 "auto_save_interval": int(self.auto_save_var.get()),
                 "sound_enabled": self.sound_var.get(),
                 "auto_goal_adjustment": self.auto_goal_var.get(),
+                "click_x": int(self.click_x_var.get()),
+                "click_y": int(self.click_y_var.get()),
+                "click_hotkey": self.hotkey_var.get().strip().lower(),
             }
             if new_settings["sprint_duration"] <= 0:
                 raise ValueError("Длительность спринта должна быть > 0")
@@ -523,3 +652,7 @@ class SettingsWindow:
             self.auto_save_var.set(str(DEFAULT_SETTINGS["auto_save_interval"]))
             self.sound_var.set(DEFAULT_SETTINGS["sound_enabled"])
             self.auto_goal_var.set(DEFAULT_SETTINGS["auto_goal_adjustment"])
+            self.click_x_var.set(str(DEFAULT_SETTINGS.get("click_x", 500)))
+            self.click_y_var.set(str(DEFAULT_SETTINGS.get("click_y", 500)))
+            self.hotkey_var.set(DEFAULT_SETTINGS.get("click_hotkey", "ctrl+shift+f"))
+            self.pick_status.config(text="✅ Сброшено", fg="#4ecdc4")

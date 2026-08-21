@@ -14,6 +14,9 @@ DEFAULT_SETTINGS = {
     "auto_save_interval": 60,
     "sound_enabled": True,
     "auto_goal_adjustment": True,
+    "click_x": 500,
+    "click_y": 500,
+    "click_hotkey": "ctrl+shift+f",
 }
 
 
