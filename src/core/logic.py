@@ -641,6 +641,11 @@ class TrackerLogic:
         if not self.session_active or self.current_phase_start is None:
             return
 
+        # Защита от повторного входа (на случай если tick() вызывается
+        # пока _advance_phase ещё не завершился)
+        if getattr(self, '_phase_advancing', False):
+            return
+
         elapsed = self.get_effective_phase_time()
         duration = self._current_phase_duration
         remaining = duration - elapsed
@@ -655,8 +660,12 @@ class TrackerLogic:
 
             if elapsed >= duration:
                 self._sprint_warning_sent = False
-                
-                self._advance_phase()
+                self._phase_advancing = True
+                try:
+                    self._advance_phase()
+                finally:
+                    self._phase_advancing = False
+
         else:  # break
             if remaining <= 5 and remaining > 0 and not self._break_warning_sent:
                 self._break_warning_sent = True
@@ -667,31 +676,47 @@ class TrackerLogic:
 
             if elapsed >= duration:
                 self._break_warning_sent = False
-                
-                self._advance_phase()
+                self._phase_advancing = True
+                try:
+                    self._advance_phase()
+                finally:
+                    self._phase_advancing = False
+
 
     def _advance_phase(self) -> None:
         """Перейти к следующей фазе или завершить все повторы профиля."""
         profile = self.profile_manager.get_active_profile()
         if not profile or not profile.phases:
+            # Нет профиля → завершаем
+            self.current_phase = "idle"
+            self.current_phase_start = None
+            self._recording = False
             self.sprint_finished = True
-        elif self.current_sprint_index + 1 < len(profile.phases):
+            self._play_warning_sound("sprint_end")
+            self.on_update()
+            return
+
+        if self.current_sprint_index + 1 < len(profile.phases):
+            # Есть следующая фаза в цикле
             self.current_sprint_index += 1
             self._start_phase(profile.phases[self.current_sprint_index].type)
             return
-        elif self.current_cycle + 1 < max(1, profile.repeat):
+
+        if self.current_cycle + 1 < max(1, profile.repeat):
+            # Начинаем следующий цикл
             self.current_cycle += 1
             self.current_sprint_index = 0
             self._start_phase(profile.phases[0].type)
             return
-        else:
-            self.sprint_finished = True
 
+        # Все фазы и циклы завершены — сразу выставляем idle ДО on_update
         self.current_phase = "idle"
         self.current_phase_start = None
         self._recording = False
+        self.sprint_finished = True
         self._play_warning_sound("sprint_end")
         self.on_update()
+
 
     def skip_break(self) -> None:
         """Пропустить текущий перерыв и перейти к следующей фазе."""
