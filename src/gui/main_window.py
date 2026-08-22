@@ -1156,6 +1156,13 @@ class TrackerGUI:
 
     def on_close(self):
         self.logic.close()
+        # Обязательно сохраняем — stop_session добавил завершённую сессию
+        # в logic.sessions, нужно записать это на диск прямо сейчас,
+        # иначе при следующем запуске сессия пропадёт.
+        try:
+            save_logic_progress(self.logic)
+        except Exception:
+            pass
         if self.floating_widget and self.floating_widget.window.winfo_exists():
             self.floating_widget.close()
         if self._stats_window and self._stats_window.window.winfo_exists():
@@ -1163,6 +1170,7 @@ class TrackerGUI:
         if self._settings_window and self._settings_window.window.winfo_exists():
             self._settings_window.window.destroy()
         self.root.destroy()
+
 
     def run(self):
         self.root.mainloop()
