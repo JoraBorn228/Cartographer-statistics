@@ -768,13 +768,15 @@ class TrackerGUI:
                     fg="#ffd166",
                 )
             elif self.logic.current_phase == "sprint":
+                num, total = self.logic.get_phase_number()
                 self.phase_label.config(
-                    text=f"⏱ Спринт {self.logic.current_sprint_index + 1}/{self.logic.sprint_repeats}",
+                    text=f"⏱ Спринт {num}/{total}",
                     fg=ACCENT,
                 )
             elif self.logic.current_phase == "break":
+                num, total = self.logic.get_phase_number()
                 self.phase_label.config(
-                    text=f"☕ Перерыв {self.logic.current_sprint_index + 1}/{self.logic.sprint_repeats}",
+                    text=f"☕ Перерыв {num}/{total}",
                     fg=COMBO_COLOR,
                 )
             elif self.logic.sprint_finished:
@@ -783,6 +785,7 @@ class TrackerGUI:
                 self.phase_label.config(text="Сессия: идёт", fg=ACCENT)
         else:
             self.phase_label.config(text="⏸ Сессия: не начата", fg=FG_SECONDARY)
+
 
     def _update_tab_label(self):
         display = self.logic.current_tab if len(self.logic.current_tab) <= 48 else self.logic.current_tab[:45] + "..."

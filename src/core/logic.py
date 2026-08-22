@@ -128,6 +128,39 @@ class TrackerLogic:
             return True
         return False
 
+    def get_phase_number(self) -> tuple:
+        """Вернуть (текущий_номер, всего) для текущей фазы.
+
+        Учитывает repeat (несколько циклов) и считает только фазы
+        того же типа, что и current_phase.
+        Возвращает (current_num, total) начиная с 1.
+        """
+        profile = self.profile_manager.get_active_profile()
+        phase_type = self.current_phase  # "sprint" или "break"
+
+        if not profile or not profile.phases or phase_type not in ("sprint", "break"):
+            return (1, 1)
+
+        # Сколько фаз данного типа в одном цикле
+        per_cycle = sum(1 for p in profile.phases if p.type == phase_type)
+        if per_cycle == 0:
+            return (1, 1)
+
+        # Общее количество за все циклы
+        total = per_cycle * max(1, profile.repeat)
+
+        # Сколько фаз данного типа прошло до current_sprint_index включительно
+        phases_so_far = sum(
+            1 for p in profile.phases[: self.current_sprint_index + 1]
+            if p.type == phase_type
+        )
+        # Плюс завершённые циклы
+        current_num = self.current_cycle * per_cycle + phases_so_far
+
+        return (max(1, current_num), total)
+
+
+
     def get_phase_duration(self, phase_type: str, index: int) -> int:
         """Получить длительность фазы из профиля."""
         profile = self.profile_manager.get_active_profile()
