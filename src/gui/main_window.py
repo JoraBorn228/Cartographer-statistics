@@ -1155,10 +1155,12 @@ class TrackerGUI:
         save_logic_progress(self.logic)
 
     def on_close(self):
-        self.logic.close()
-        # Обязательно сохраняем — stop_session добавил завершённую сессию
-        # в logic.sessions, нужно записать это на диск прямо сейчас,
-        # иначе при следующем запуске сессия пропадёт.
+        # Завершаем сессию и сохраняем — всё в try-except,
+        # чтобы гарантированно сохранить данные даже при ошибках в GUI
+        try:
+            self.logic.close()
+        except Exception:
+            pass
         try:
             save_logic_progress(self.logic)
         except Exception:

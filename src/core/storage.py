@@ -60,7 +60,7 @@ def save_progress(
     # каждые 60 секунд перезаписывает файл пустыми значениями.
     if not real_earnings and SAVE_FILE.exists():
         try:
-            old_data = json.loads(SAVE_FILE.read_text(encoding="utf-8"))
+            old_data = json.loads(SAVE_FILE.read_text(encoding="utf-8-sig"))
             old_real = old_data.get("real_earnings")
             if isinstance(old_real, dict) and len(old_real) > 0:
                 real_earnings = old_real
@@ -69,10 +69,23 @@ def save_progress(
     
     if not goals and SAVE_FILE.exists():
         try:
-            old_data = json.loads(SAVE_FILE.read_text(encoding="utf-8"))
+            old_data = json.loads(SAVE_FILE.read_text(encoding="utf-8-sig"))
             old_goals = old_data.get("goals")
             if isinstance(old_goals, list) and len(old_goals) > 0:
                 goals = old_goals
+        except Exception:
+            pass
+    
+    # === ЗАЩИТА ОТ ПОТЕРИ СЕССИЙ ===
+    # Если sessions пуст, но в файле есть сессии — не перезаписываем!
+    # Это защищает от ситуации, когда load_progress не смог прочитать
+    # файл и вернул пустой список, а автосохранение перезаписало всё.
+    if not sessions and SAVE_FILE.exists():
+        try:
+            old_data = json.loads(SAVE_FILE.read_text(encoding="utf-8-sig"))
+            old_sessions = old_data.get("sessions")
+            if isinstance(old_sessions, list) and len(old_sessions) > 0:
+                sessions = sessions_from_list(old_sessions)
         except Exception:
             pass
     
@@ -117,6 +130,15 @@ def save_progress(
     
     # Создаём папку data, если её нет
     SAVE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Создаём backup текущего файла перед перезаписью
+    if SAVE_FILE.exists():
+        try:
+            backup = SAVE_FILE.with_suffix(".json.backup")
+            backup.write_text(SAVE_FILE.read_text(encoding="utf-8"), encoding="utf-8")
+        except Exception:
+            pass
+    
     temp_file = SAVE_FILE.with_suffix(".tmp")
     temp_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     os.replace(temp_file, SAVE_FILE)
@@ -174,7 +196,8 @@ def load_progress() -> Dict[str, Any]:
         if not path.exists():
             return None
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            content = path.read_text(encoding="utf-8-sig")
+            return json.loads(content)
         except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             return None
 
