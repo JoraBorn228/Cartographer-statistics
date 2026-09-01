@@ -554,7 +554,59 @@ class SettingsWindow:
             print(f"Ошибка при открытии редактора профилей: {e}")
 
     def _pick_click_point(self):
-        """Режим выбора точки клика мышкой (в отдельном потоке, не блокирует UI)."""
+        """Выбрать точку клика — обратный отсчёт 3 сек, потом читаем позицию курсора.
+
+        Использует ctypes.GetCursorPos (логические пиксели) — то же пространство
+        координат, что SetCursorPos при клике. Это устраняет смещение при
+        DPI-масштабировании (125%, 150% и т.д.) на ноутбуках.
+        Старый способ через pynput.Listener оставлен как запасной.
+        """
+        try:
+            import ctypes, ctypes.wintypes
+            HAVE_CTYPES = True
+        except ImportError:
+            HAVE_CTYPES = False
+
+        if not HAVE_CTYPES:
+            self._pick_via_pynput()
+            return
+
+        self.pick_status.config(
+            text="👆 Наведи курсор на нужную кнопку и жди отсчёта...", fg=ACCENT
+        )
+        self.pick_btn.config(text="⏳ 3...", state=tk.DISABLED)
+        self.window.attributes("-alpha", 0.3)
+
+        def _countdown(n):
+            try:
+                if not self.window.winfo_exists():
+                    return
+                if n > 0:
+                    self.pick_btn.config(text=f"⏳ {n}...")
+                    self.window.after(1000, lambda: _countdown(n - 1))
+                else:
+                    pt = ctypes.wintypes.POINT()
+                    ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+                    x, y = pt.x, pt.y
+                    self.window.attributes("-alpha", 1.0)
+                    self.pick_btn.config(text="📍 Указать", state=tk.NORMAL)
+                    self.click_x_var.set(str(x))
+                    self.click_y_var.set(str(y))
+                    self.pick_status.config(
+                        text=f"✅ Выбрано: ({x}, {y})", fg="#4ecdc4"
+                    )
+            except Exception:
+                try:
+                    self.window.attributes("-alpha", 1.0)
+                    self.pick_btn.config(text="📍 Указать", state=tk.NORMAL)
+                    self.pick_status.config(text="❌ Ошибка выбора", fg="#ff6b6b")
+                except Exception:
+                    pass
+
+        self.window.after(0, lambda: _countdown(3))
+
+    def _pick_via_pynput(self):
+        """Запасной вариант выбора через pynput (может давать смещение при DPI != 100%)."""
         import threading
         try:
             from pynput.mouse import Listener
@@ -562,10 +614,9 @@ class SettingsWindow:
             self.pick_status.config(text="❌ Нет pynput: pip install pynput", fg="#ff6b6b")
             return
 
-        self.pick_status.config(text="👆 Кликни мышкой где угодно на экране...", fg=ACCENT)
+        self.pick_status.config(text="👆 Кликни мышкой на нужную кнопку...", fg=ACCENT)
         self.pick_btn.config(text="⏳ Выбор...", state=tk.DISABLED)
-        self.window.attributes('-alpha', 0.3)
-
+        self.window.attributes("-alpha", 0.3)
         picked = {"x": None, "y": None}
 
         def _listen():
@@ -573,12 +624,9 @@ class SettingsWindow:
                 if pressed:
                     picked["x"] = int(x)
                     picked["y"] = int(y)
-                    return False  # Остановить слушатель
-
+                    return False
             with Listener(on_click=on_click) as listener:
                 listener.join()
-
-            # Передаём результат в главный поток через after
             try:
                 if self.window.winfo_exists():
                     self.window.after(0, _on_done)
@@ -587,14 +635,13 @@ class SettingsWindow:
 
         def _on_done():
             try:
-                self.window.attributes('-alpha', 1.0)
+                self.window.attributes("-alpha", 1.0)
                 self.pick_btn.config(text="📍 Указать", state=tk.NORMAL)
                 if picked["x"] is not None:
                     self.click_x_var.set(str(picked["x"]))
                     self.click_y_var.set(str(picked["y"]))
                     self.pick_status.config(
-                        text=f"✅ Выбрано: ({picked['x']}, {picked['y']})",
-                        fg="#4ecdc4",
+                        text=f"✅ Выбрано: ({picked['x']}, {picked['y']})", fg="#4ecdc4"
                     )
                 else:
                     self.pick_status.config(text="❌ Выбор отменён", fg="#ff6b6b")

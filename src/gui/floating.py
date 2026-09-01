@@ -7,10 +7,17 @@ import time
 import keyboard
 
 try:
-    from pynput.mouse import Controller, Button
+    from pynput.mouse import Controller, Button, Listener as MouseListener
     PYNPUT_AVAILABLE = True
 except ImportError:
     PYNPUT_AVAILABLE = False
+
+try:
+    import ctypes
+    import ctypes.wintypes
+    CTYPES_AVAILABLE = True
+except ImportError:
+    CTYPES_AVAILABLE = False
 
 from src.utils.config import BG, FG, ACCENT
 from src.utils.helpers import calc_points_per_hour, get_productive_tab_time
@@ -133,29 +140,52 @@ class FloatingWidget:
             self._current_hotkey_id = keyboard.add_hotkey(hk, self._simulate_click, suppress=False)
 
     def _simulate_click(self):
-        if not PYNPUT_AVAILABLE:
-            messagebox.showwarning("Ошибка", "Установите pynput: pip install pynput")
-            return
+        """Кликнуть мышью по сохранённым координатам.
 
+        Использует ctypes (SendInput) — работает корректно при любом
+        масштабировании DPI на Windows, т.к. координаты трактуются как
+        логические пиксели, те же что pynput.Listener отдаёт при выборе.
+        """
         try:
-            mouse = Controller()
-            target_x = self.settings.get("click_x", 500)
-            target_y = self.settings.get("click_y", 500)
-            
-            # Сохраняем текущую позицию мыши
-            current_pos = mouse.position
-            current_x, current_y = current_pos
-            
-            # Перемещаем мышь в целевую точку
-            mouse.position = (target_x, target_y)
-            
-            # Делаем клик
-            mouse.click(Button.left, 1)
-            
-            # Возвращаем мышь в исходную позицию
-            mouse.position = (current_x, current_y)
+            target_x = int(self.settings.get("click_x", 500))
+            target_y = int(self.settings.get("click_y", 500))
+
+            if CTYPES_AVAILABLE:
+                # --- ctypes SendInput: надёжно на любом DPI ---
+                user32 = ctypes.windll.user32
+
+                # Сохраняем текущую позицию
+                pt = ctypes.wintypes.POINT()
+                user32.GetCursorPos(ctypes.byref(pt))
+                orig_x, orig_y = pt.x, pt.y
+
+                # Переносим курсор (логические координаты)
+                user32.SetCursorPos(target_x, target_y)
+
+                # MOUSEEVENTF_LEFTDOWN + MOUSEEVENTF_LEFTUP
+                MOUSEEVENTF_LEFTDOWN = 0x0002
+                MOUSEEVENTF_LEFTUP   = 0x0004
+                user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+                time.sleep(0.04)
+                user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+
+                # Возвращаем мышь
+                time.sleep(0.04)
+                user32.SetCursorPos(orig_x, orig_y)
+
+            elif PYNPUT_AVAILABLE:
+                # Fallback: pynput (может быть неточным при DPI != 100%)
+                mouse = Controller()
+                orig = mouse.position
+                mouse.position = (target_x, target_y)
+                time.sleep(0.04)
+                mouse.click(Button.left, 1)
+                time.sleep(0.04)
+                mouse.position = orig
+
         except Exception as e:
-            print(f"Ошибка клика: {e}")
+            print(f"Click error: {e}")
+
 
     def _on_hide(self):
         """Когда окно скрыто/закрыто — отключаем хоткей"""
