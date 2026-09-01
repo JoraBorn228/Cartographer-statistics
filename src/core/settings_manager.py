@@ -17,6 +17,9 @@ DEFAULT_SETTINGS = {
     "click_x": 500,
     "click_y": 500,
     "click_hotkey": "ctrl+shift+f",
+    # Синхронизация через Git
+    "sync_enabled": True,
+    "auto_push_interval": 10,  # минут (0 = выключено)
 }
 
 

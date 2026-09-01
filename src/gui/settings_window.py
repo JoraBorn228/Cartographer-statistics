@@ -11,6 +11,10 @@ from src.utils.config import (
 )
 from src.core.settings_manager import load_settings, save_settings, DEFAULT_SETTINGS
 from src.gui.profile_editor import ProfileEditor
+try:
+    from src.core.sync_manager import SyncManager as _SyncManager
+except ImportError:
+    _SyncManager = None
 
 # Шрифты
 _FONT_TITLE = ("Segoe UI", 16, "bold")
@@ -23,10 +27,11 @@ _FONT_BTN_SECONDARY = ("Segoe UI", 10)
 
 
 class SettingsWindow:
-    def __init__(self, parent, logic, on_settings_changed: Callable):
+    def __init__(self, parent, logic, on_settings_changed: Callable, sync_manager=None):
         self.parent = parent
         self.logic = logic
         self.on_settings_changed = on_settings_changed
+        self.sync_manager = sync_manager
 
         # Используем единый ProfileManager из логики
         self.settings = load_settings()
@@ -324,10 +329,56 @@ class SettingsWindow:
         self._add_toggle(card, "Включить звуки", self.sound_var)
 
         # ============================================================
+        # СИНХРОНИЗАЦИЯ ЧЕРЕЗ GIT
+        # ============================================================
+        card = self._add_card(content, "☁ Синхронизация (Git)")
+
+        self.sync_enabled_var = tk.BooleanVar(value=self.settings.get("sync_enabled", True))
+        self._add_toggle(card, "Включить синхронизацию через Git", self.sync_enabled_var)
+
+        # Интервал авто-пуша
+        sync_row = tk.Frame(card, bg=BG_CARD)
+        sync_row.pack(fill=tk.X, padx=12, pady=(4, 4))
+        tk.Label(
+            sync_row, text="Авто-пуш каждые (мин, 0 = выкл.):",
+            fg=FG, bg=BG_CARD, font=_FONT_LABEL
+        ).pack(side=tk.LEFT)
+        self.auto_push_var = tk.StringVar(value=str(self.settings.get("auto_push_interval", 10)))
+        tk.Spinbox(
+            sync_row,
+            from_=0, to=120, increment=5,
+            textvariable=self.auto_push_var,
+            width=5,
+            bg=BG_CARD, fg=FG,
+            buttonbackground=BG_CARD,
+            relief=tk.FLAT,
+            font=_FONT_LABEL,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+
+        # Кнопка «Синхронизировать сейчас»
+        sync_btn_row = tk.Frame(card, bg=BG_CARD)
+        sync_btn_row.pack(fill=tk.X, padx=12, pady=(4, 8))
+        self._make_button(
+            sync_btn_row,
+            text="☁ Синхронизировать сейчас",
+            command=self._do_sync_now,
+        ).pack(side=tk.LEFT)
+        self.sync_info_label = tk.Label(
+            sync_btn_row,
+            text="",
+            fg=FG_SECONDARY,
+            bg=BG_CARD,
+            font=_FONT_HINT,
+        )
+        self.sync_info_label.pack(side=tk.LEFT, padx=(10, 0))
+        self._update_sync_info()
+
+        # ============================================================
         # КНОПКИ
         # ============================================================
         btn_frame = tk.Frame(self.window, bg=BG)
         btn_frame.pack(fill=tk.X, padx=18, pady=(6, 14))
+
 
         self._make_button(
             btn_frame,
@@ -650,6 +701,32 @@ class SettingsWindow:
 
         threading.Thread(target=_listen, daemon=True).start()
 
+    def _update_sync_info(self) -> None:
+        """Show last remote commit time in sync info label."""
+        try:
+            if self.sync_manager:
+                info = self.sync_manager.get_last_remote_info()
+                self.sync_info_label.config(text="GitHub: " + info, fg=FG_SECONDARY)
+            else:
+                self.sync_info_label.config(text="(sync manager не подключён)", fg=FG_SECONDARY)
+        except Exception:
+            pass
+
+    def _do_sync_now(self) -> None:
+        """Manual sync button handler."""
+        from src.core.storage import save_logic_progress
+        try:
+            save_logic_progress(self.logic)
+        except Exception:
+            pass
+        if self.sync_manager:
+            self.sync_info_label.config(text="Синхронизация...", fg="#ffd166")
+            self.window.update_idletasks()
+            self.sync_manager.push("manual: sync from settings", blocking=False)
+            self.window.after(3000, self._update_sync_info)
+        else:
+            self.sync_info_label.config(text="Синхронизация недоступна", fg="#ff6b6b")
+
     def _save_settings(self):
         try:
             new_settings = {
@@ -663,6 +740,8 @@ class SettingsWindow:
                 "click_x": int(self.click_x_var.get()),
                 "click_y": int(self.click_y_var.get()),
                 "click_hotkey": self.hotkey_var.get().strip().lower(),
+                "sync_enabled": self.sync_enabled_var.get(),
+                "auto_push_interval": int(self.auto_push_var.get()),
             }
             if new_settings["sprint_duration"] <= 0:
                 raise ValueError("Длительность спринта должна быть > 0")

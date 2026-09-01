@@ -15,11 +15,31 @@ from src.gui.main_window import TrackerGUI
 from src.core.storage import load_progress
 from src.core.settings_manager import load_settings
 from src.core.profile_manager import ProfileManager
+from src.core.sync_manager import SyncManager
 
 
 def main():
-    data = load_progress()
     settings = load_settings()
+
+    # --- Синхронизация: pull перед загрузкой данных ---
+    sync_enabled = settings.get("sync_enabled", True)
+    auto_push_interval = int(settings.get("auto_push_interval", 10))
+
+    sync_manager = SyncManager(auto_push_interval=auto_push_interval)
+    sync_manager.enabled = sync_enabled
+
+    if sync_enabled and sync_manager.is_git_available():
+        print("[sync] Проверяем обновления на GitHub...")
+        result = sync_manager.pull_on_start()
+        print(f"[sync] pull: {result}")
+    else:
+        if not sync_enabled:
+            print("[sync] Синхронизация отключена в настройках")
+        else:
+            print("[sync] git недоступен — синхронизация пропущена")
+
+    # --- Загружаем данные (после pull — берём актуальную версию) ---
+    data = load_progress()
 
     # Единый менеджер профилей для всех компонентов
     profile_manager = ProfileManager()
@@ -47,9 +67,10 @@ def main():
     logic.auto_goal_adjustment = settings.get("auto_goal_adjustment", True)
     logic.restore_active_session(data.get("active_session"))
 
-    gui = TrackerGUI(logic)
+    gui = TrackerGUI(logic, sync_manager=sync_manager)
     gui.run()
 
 
 if __name__ == "__main__":
     main()
+

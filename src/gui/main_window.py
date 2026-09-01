@@ -12,6 +12,7 @@ from typing import Optional, List
 from src.core.logic import TrackerLogic
 from src.core.models import Session, Particle
 from src.core.storage import save_logic_progress
+from src.core.sync_manager import SyncManager
 from src.utils.config import (
     WINDOW_W, WINDOW_H, BG, BG_CARD, FG, FG_SECONDARY, ACCENT, ACCENT_DARK,
     LEVEL_COLOR, COMBO_COLOR, BAR_BG, BAR_FG, BAR_FG_BREAK, GOAL_BAR_FG,
@@ -35,8 +36,9 @@ from src.gui.manage_goals_window import ManageGoalsWindow
 
 
 class TrackerGUI:
-    def __init__(self, logic):
+    def __init__(self, logic, sync_manager: Optional["SyncManager"] = None):
         self.logic = logic
+        self.sync_manager: Optional[SyncManager] = sync_manager
         self.root = tk.Tk()
         self.root.title("Картограф")
         self.root.geometry(f"{WINDOW_W}x{WINDOW_H}")
@@ -61,6 +63,12 @@ class TrackerGUI:
         self.logic.register_hotkey()
         self._tick()
         self._check_goal_adjustment()
+
+        # Запускаем авто-пуш и прописываем колбэк статуса
+        if self.sync_manager:
+            self.sync_manager.on_status = self._on_sync_status
+            if self.sync_manager.auto_push_interval > 0:
+                self.sync_manager.start_auto_push(self.sync_manager.auto_push_interval)
 
     # ============================================================
     #  1. ПОСТРОЕНИЕ ИНТЕРФЕЙСА
@@ -110,6 +118,18 @@ class TrackerGUI:
             bg=BG,
         )
         self.session_time_label.pack(side=tk.LEFT, padx=(10, 0))
+
+        # Статус синхронизации (рядом с рангом)
+        self.sync_status_label = tk.Label(
+            left,
+            text="",
+            font=self.tiny_font,
+            fg="#4ecdc4",
+            bg=BG,
+            cursor="hand2",
+        )
+        self.sync_status_label.pack(side=tk.LEFT, padx=(12, 0))
+        self.sync_status_label.bind("<Button-1>", lambda e: self._manual_sync())
 
         # Кнопки справа
         btn_frame = tk.Frame(header, bg=BG)
@@ -633,7 +653,10 @@ class TrackerGUI:
         if self._settings_window and self._settings_window.window.winfo_exists():
             self._settings_window.window.lift()
             return
-        self._settings_window = SettingsWindow(self.root, self.logic, self._on_settings_changed)
+        self._settings_window = SettingsWindow(
+            self.root, self.logic, self._on_settings_changed,
+            sync_manager=self.sync_manager,
+        )
         self._settings_window.window.protocol("WM_DELETE_WINDOW", self._close_settings_window)
 
     def _close_settings_window(self):
@@ -1154,9 +1177,28 @@ class TrackerGUI:
         # включая current_cycle, paused, pause_start, paused_accumulated.
         save_logic_progress(self.logic)
 
+    def _on_sync_status(self, text: str, color: str) -> None:
+        """Обновить метку статуса синхронизации из любого потока."""
+        try:
+            if self.root.winfo_exists():
+                self.root.after(0, lambda: self._set_sync_label(text, color))
+        except Exception:
+            pass
+
+    def _set_sync_label(self, text: str, color: str) -> None:
+        try:
+            self.sync_status_label.config(text="☁ " + text, fg=color)
+        except Exception:
+            pass
+
+    def _manual_sync(self) -> None:
+        """Ручная синхронизация по клику на метку статуса."""
+        if self.sync_manager and self.sync_manager.enabled:
+            save_logic_progress(self.logic)
+            self.sync_manager.push("manual: sync from app")
+
     def on_close(self):
-        # Завершаем сессию и сохраняем — всё в try-except,
-        # чтобы гарантированно сохранить данные даже при ошибках в GUI
+        # Завершаем сессию и сохраняем
         try:
             self.logic.close()
         except Exception:
@@ -1165,6 +1207,19 @@ class TrackerGUI:
             save_logic_progress(self.logic)
         except Exception:
             pass
+
+        # Останавливаем авто-пуш
+        if self.sync_manager:
+            try:
+                self.sync_manager.stop_auto_push()
+            except Exception:
+                pass
+            # Пушим финальное состояние синхронно перед закрытием
+            try:
+                self.sync_manager.push("auto: close", blocking=True)
+            except Exception:
+                pass
+
         if self.floating_widget and self.floating_widget.window.winfo_exists():
             self.floating_widget.close()
         if self._stats_window and self._stats_window.window.winfo_exists():
@@ -1175,4 +1230,4 @@ class TrackerGUI:
 
 
     def run(self):
-        self.root.mainloop()
+        self.root.mainloop()
