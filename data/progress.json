@@ -885,17 +885,8 @@
       "target_date": "2026-08-31",
       "mode": "from_approx",
       "income_source": "user",
-      "created_at": 1786991613.003414
-    },
-    {
-      "id": "1788013808.791901",
-      "name": "Цель 3",
-      "target_amount": 30000.0,
-      "target_date": "2026-09-01",
-      "mode": "from_real",
-      "income_source": "real",
-      "created_at": 1788013808.791901
+      "created_at": 1788304565.7191925
     }
   ],
-  "active_goal_id": "1788013808.791901"
+  "active_goal_id": "1788304565.7191925"
 }
