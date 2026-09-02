@@ -8,5 +8,7 @@
   "auto_goal_adjustment": true,
   "click_x": 726,
   "click_y": 683,
-  "click_hotkey": "ctrl+d"
+  "click_hotkey": "ctrl+d",
+  "sync_enabled": true,
+  "auto_push_interval": 10
 }
