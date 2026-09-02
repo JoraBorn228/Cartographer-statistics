@@ -1,6 +1,6 @@
 {
-  "points": 24898,
-  "level": 3209,
+  "points": 24774,
+  "level": 3189,
   "sprint_duration": 15,
   "break_duration": 3,
   "sprint_repeats": 4,
@@ -818,37 +818,10 @@
         "(1) ‎Еся – (1584862)": 2.683107614517212
       },
       "tags": []
-    },
-    {
-      "started_at": 1788307677.669288,
-      "ended_at": 1788307685.641475,
-      "points": 40,
-      "tab_times": {
-        "Картограф": 7.960618495941162
-      },
-      "tags": []
-    },
-    {
-      "started_at": 1788307953.911714,
-      "ended_at": 1788307963.667449,
-      "points": 38,
-      "tab_times": {
-        "Картограф": 9.742687463760376
-      },
-      "tags": []
-    },
-    {
-      "started_at": 1788307955.7490833,
-      "ended_at": 1788307971.1330373,
-      "points": 46,
-      "tab_times": {
-        "Картограф": 15.369951963424683
-      },
-      "tags": []
     }
   ],
-  "daily_goal": 0,
-  "goal_start_date": "2026-08-25",
+  "daily_goal": 1700,
+  "goal_start_date": "2026-09-02",
   "active_session": null,
   "total_goal": 0,
   "total_goal_achieved_notified": false,
