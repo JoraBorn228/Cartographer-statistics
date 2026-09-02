@@ -1,6 +1,6 @@
 {
-  "points": 24814,
-  "level": 3195,
+  "points": 24852,
+  "level": 3202,
   "sprint_duration": 15,
   "break_duration": 3,
   "sprint_repeats": 4,
@@ -825,6 +825,15 @@
       "points": 40,
       "tab_times": {
         "Картограф": 7.960618495941162
+      },
+      "tags": []
+    },
+    {
+      "started_at": 1788307953.911714,
+      "ended_at": 1788307963.667449,
+      "points": 38,
+      "tab_times": {
+        "Картограф": 9.742687463760376
       },
       "tags": []
     }
