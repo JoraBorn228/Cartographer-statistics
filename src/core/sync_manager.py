@@ -19,6 +19,9 @@ from typing import Callable, Optional, Dict, Any
 _REPO_ROOT = Path(__file__).parent.parent.parent
 PROGRESS_FILE = _REPO_ROOT / "data" / "progress.json"
 
+# Файлы данных, которые синхронизируются и коммитятся автоматически
+DATA_FILES = ("data/progress.json", "data/settings.json")
+
 
 def _run_git(*args: str, timeout: int = 15) -> tuple:
     """Выполнить git-команду. Возвращает (success, output)."""
@@ -42,7 +45,7 @@ def _run_git(*args: str, timeout: int = 15) -> tuple:
 
 def _load_json(path: Path) -> Optional[Dict[str, Any]]:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8-sig"))
     except Exception:
         return None
 
@@ -125,6 +128,69 @@ class SyncManager:
         self.enabled = True
 
     # ------------------------------------------------------------------ #
+    #  Служебные git-операции                                              #
+    # ------------------------------------------------------------------ #
+
+    def _ensure_clean_git_state(self) -> None:
+        """Отменить зависшие merge/rebase, которые блокируют любые операции."""
+        git_dir = _REPO_ROOT / ".git"
+        try:
+            if (git_dir / "MERGE_HEAD").exists():
+                _run_git("merge", "--abort")
+            if (git_dir / "rebase-merge").exists() or (git_dir / "rebase-apply").exists():
+                _run_git("rebase", "--abort")
+        except Exception:
+            pass
+
+    def _commit_data_changes(self, message: str) -> bool:
+        """Закоммитить локальные изменения файлов данных. True = можно продолжать."""
+        ok, _ = _run_git("add", *DATA_FILES)
+        if not ok:
+            return False
+        ok_nochange, _ = _run_git("diff", "--cached", "--quiet")
+        if ok_nochange:
+            return True  # нечего коммитить — это не ошибка
+        ok, _ = _run_git("commit", "-m", message)
+        return ok
+
+    def _read_remote_progress(self) -> Optional[Dict[str, Any]]:
+        """Прочитать progress.json из origin/main без checkout."""
+        try:
+            result = subprocess.run(
+                ["git", "show", "origin/main:data/progress.json"],
+                cwd=str(_REPO_ROOT),
+                capture_output=True,
+                timeout=15,
+            )
+            if result.returncode != 0:
+                return None
+            return json.loads(result.stdout.decode("utf-8-sig"))
+        except Exception:
+            return None
+
+    def _integrate_remote(self, local_data: Optional[Dict]) -> bool:
+        """Влить origin/main в локальную историю. Дерево должно быть чистым.
+
+        1. Пробуем fast-forward (локаль строго позади — просто подтягиваем).
+        2. Если разошлись — умное слияние JSON, коммит, merge с приоритетом ours.
+        """
+        ok, _ = _run_git("merge", "--ff-only", "origin", "main")
+        if ok:
+            return True
+
+        # Ветки разошлись — сливаем данные на уровне JSON
+        remote_data = self._read_remote_progress()
+        if local_data and remote_data:
+            merged = _merge_progress(local_data, remote_data)
+            _save_json(PROGRESS_FILE, merged)
+            if not self._commit_data_changes("auto: merge remote progress data"):
+                return False
+
+        # История: merge с приоритетом ours (данные remote уже в нашем JSON)
+        ok, _ = _run_git("merge", "-X", "ours", "-m", "auto: sync with remote", "origin/main")
+        return ok
+
+    # ------------------------------------------------------------------ #
     #  PULL при старте                                                     #
     # ------------------------------------------------------------------ #
 
@@ -136,28 +202,33 @@ class SyncManager:
         """
         if not self.enabled:
             return "sync_disabled"
+        if not self.is_git_available():
+            return "pull_failed"
+
+        # 0. Зависшие merge/rebase блокируют pull — убираем
+        self._ensure_clean_git_state()
 
         local_data = _load_json(PROGRESS_FILE)
-        mtime_before = self._file_mtime()
 
-        ok, out = _run_git("pull", "--rebase", "origin", "main")
-        if not ok:
-            # Попробуем без rebase
-            ok, out = _run_git("pull", "origin", "main")
-        if not ok:
+        # 1. Локальные изменения данных коммитим, иначе pull упадёт
+        if not self._commit_data_changes("auto: local changes before pull"):
             self.last_pull_time = time.time()
             return "pull_failed"
 
-        mtime_after = self._file_mtime()
-        if mtime_after == mtime_before:
+        # 2. Подтягиваем remote
+        _run_git("fetch", "origin", "main", timeout=30)
+
+        # Быстрая проверка: совпадают ли коммиты
+        ok_l, local_sha = _run_git("rev-parse", "HEAD")
+        ok_r, remote_sha = _run_git("rev-parse", "origin/main")
+        if ok_l and ok_r and local_sha.strip() == remote_sha.strip():
             self.last_pull_time = time.time()
             return "up_to_date"
 
-        # Файл изменился - сливаем
-        remote_data = _load_json(PROGRESS_FILE)
-        if local_data and remote_data:
-            merged = _merge_progress(local_data, remote_data)
-            _save_json(PROGRESS_FILE, merged)
+        # 3. Вливаем remote
+        if not self._integrate_remote(local_data):
+            self.last_pull_time = time.time()
+            return "pull_failed"
 
         self.last_pull_time = time.time()
         return "pulled_and_merged"
@@ -178,25 +249,39 @@ class SyncManager:
     def _do_push(self, message: str) -> None:
         self.on_status("Синхронизация...", "#ffd166")
 
-        ok, _ = _run_git("add", "data/progress.json")
+        # Зависшие merge/rebase блокируют commit/push — убираем
+        self._ensure_clean_git_state()
+
+        ok, _ = _run_git("add", *DATA_FILES)
         if not ok:
             self.on_status("Ошибка git add", "#ff6b6b")
             return
 
-        # Проверяем есть ли изменения
         ok_nochange, _ = _run_git("diff", "--cached", "--quiet")
-        if ok_nochange:
-            # Нет изменений
+
+        # Есть ли незапушенные коммиты?
+        _run_git("fetch", "origin", "main", timeout=30)
+        ok_ahead, ahead_out = _run_git("rev-list", "--count", "origin/main..HEAD")
+        unpushed = ok_ahead and ahead_out.strip().isdigit() and int(ahead_out) > 0
+
+        if ok_nochange and not unpushed:
             self.on_status("Актуально", "#4ecdc4")
             self.last_push_time = time.time()
             return
 
-        ok, out = _run_git("commit", "-m", message)
-        if not ok:
-            self.on_status("Ошибка git commit", "#ff6b6b")
-            return
+        if not ok_nochange:
+            ok, _ = _run_git("commit", "-m", message)
+            if not ok:
+                self.on_status("Ошибка git commit", "#ff6b6b")
+                return
 
         ok, out = _run_git("push", "origin", "main")
+        if not ok:
+            # Push отклонён — история разошлась. Сливаем remote и пробуем снова.
+            local_data = _load_json(PROGRESS_FILE)
+            if self._integrate_remote(local_data):
+                ok, out = _run_git("push", "origin", "main")
+
         if ok:
             self.last_push_time = time.time()
             ts = time.strftime("%H:%M")
