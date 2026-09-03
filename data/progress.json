@@ -820,8 +820,8 @@
       "tags": []
     }
   ],
-  "daily_goal": 1800,
-  "goal_start_date": "2026-09-03",
+  "daily_goal": 0,
+  "goal_start_date": "2026-09-04",
   "active_session": null,
   "total_goal": 0,
   "total_goal_achieved_notified": false,
