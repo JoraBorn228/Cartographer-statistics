@@ -1,6 +1,6 @@
 {
-  "points": 24983,
-  "level": 3224,
+  "points": 25117,
+  "level": 3246,
   "sprint_duration": 15,
   "break_duration": 3,
   "sprint_repeats": 3,
@@ -818,15 +818,6 @@
         "(1) ‎Еся – (1584862)": 2.683107614517212
       },
       "tags": []
-    },
-    {
-      "started_at": 1789313978.2353415,
-      "ended_at": 1789313979.4635835,
-      "points": 0,
-      "tab_times": {
-        "Картограф": 0.5695090293884277
-      },
-      "tags": []
     }
   ],
   "daily_goal": 7000,
@@ -834,20 +825,20 @@
   "active_session": {
     "active": true,
     "started_at": 1789314247.8747354,
-    "points": 209,
+    "points": 343,
     "tab_times": {
       "Картограф": 1.4132778644561768,
       "—": 0.04302644729614258,
       "(7) ЛУЖА... Страшные истории на ночь. Страшилки на ночь. - YouTube": 0.5659980773925781,
-      "Бэкофис панорам": 711.1169152259827
+      "Бэкофис панорам": 1131.5131554603577
     },
     "current_phase": "sprint",
-    "current_sprint_index": 0,
+    "current_sprint_index": 2,
     "current_cycle": 0,
     "sprint_finished": false,
-    "phase_start": 1789314247.8747354,
+    "phase_start": 1789315327.8935237,
     "current_tab": "Бэкофис панорам",
-    "last_tab_poll": 1789314961.0239563,
+    "last_tab_poll": 1789315561.6715572,
     "recording": true,
     "paused": false,
     "pause_start": null,
