@@ -1,6 +1,6 @@
 {
-  "points": 25329,
-  "level": 3282,
+  "points": 25363,
+  "level": 3288,
   "sprint_duration": 15,
   "break_duration": 3,
   "sprint_repeats": 3,
@@ -825,25 +825,26 @@
   "active_session": {
     "active": true,
     "started_at": 1789314247.8747354,
-    "points": 555,
+    "points": 589,
     "tab_times": {
-      "Картограф": 3.8374946117401123,
-      "—": 0.04302644729614258,
+      "Картограф": 6.017660140991211,
+      "—": 0.6840000152587891,
       "(7) ЛУЖА... Страшные истории на ночь. Страшилки на ночь. - YouTube": 3.831235408782959,
-      "Бэкофис панорам": 1621.7701919078827,
-      "(7) WorldBegemotKot † Страшные истории † - YouTube": 4.190670490264893
+      "Бэкофис панорам": 1754.152395248413,
+      "(7) WorldBegemotKot † Страшные истории † - YouTube": 4.190670490264893,
+      "zapret: general (ALT11)": 13.74125623703003
     },
     "current_phase": "sprint",
     "current_sprint_index": 2,
     "current_cycle": 0,
     "sprint_finished": false,
     "phase_start": 1789315327.8935237,
-    "current_tab": "Бэкофис панорам",
-    "last_tab_poll": 1789316162.7833662,
+    "current_tab": "‎нови год – (1548328)",
+    "last_tab_poll": 1789316763.5902052,
     "recording": true,
-    "paused": false,
-    "pause_start": null,
-    "paused_accumulated": 101.10971069335938
+    "paused": true,
+    "pause_start": 1789316584.9369736,
+    "paused_accumulated": 374.81872034072876
   },
   "total_goal": 0,
   "total_goal_achieved_notified": false,
