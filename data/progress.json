@@ -1,9 +1,9 @@
 {
-  "points": 24786,
-  "level": 3191,
+  "points": 24813,
+  "level": 3195,
   "sprint_duration": 15,
   "break_duration": 3,
-  "sprint_repeats": 4,
+  "sprint_repeats": 3,
   "sessions": [
     {
       "started_at": 1785709817.7548234,
@@ -820,30 +820,39 @@
       "tags": []
     },
     {
-      "started_at": 1789313633.2025702,
-      "ended_at": 1789313721.3183026,
-      "points": 12,
+      "started_at": 1789313978.2353415,
+      "ended_at": 1789313979.4635835,
+      "points": 0,
       "tab_times": {
-        "Картограф": 3.8589062690734863,
-        "Бэкофис панорам": 44.98321557044983,
-        "—": 0.02346515655517578,
-        "Цель на день": 1.9292888641357422,
-        "‎Топор+ – (1545373)": 0.14711833000183105,
-        "‎Топор+ – (1545374)": 0.9450027942657471,
-        "‎Избранное – (1545374)": 0.11824297904968262,
-        "‎Избранное – (1545376)": 1.2076807022094727,
-        "‎Избранное – (1545377)": 0.7009046077728271,
-        "Просмотр медиа": 27.01015877723694,
-        "‎Избранное – (1545387)": 2.2997496128082275,
-        "Без имени — Личный: Microsoft​ Edge": 0.07464861869812012,
-        "Raspisanie_dlya_studentov_starshikh_kursov.pdf — Личный: Microsoft​ Edge": 4.811349868774414
+        "Картограф": 0.5695090293884277
       },
       "tags": []
     }
   ],
   "daily_goal": 7000,
   "goal_start_date": "2026-09-13",
-  "active_session": null,
+  "active_session": {
+    "active": true,
+    "started_at": 1789314247.8747354,
+    "points": 39,
+    "tab_times": {
+      "Картограф": 1.4132778644561768,
+      "—": 0.04302644729614258,
+      "(7) ЛУЖА... Страшные истории на ночь. Страшилки на ночь. - YouTube": 0.5659980773925781,
+      "Бэкофис панорам": 100.26717948913574
+    },
+    "current_phase": "sprint",
+    "current_sprint_index": 0,
+    "current_cycle": 0,
+    "sprint_finished": false,
+    "phase_start": 1789314247.8747354,
+    "current_tab": "Бэкофис панорам",
+    "last_tab_poll": 1789314350.171218,
+    "recording": true,
+    "paused": false,
+    "pause_start": null,
+    "paused_accumulated": 0.0
+  },
   "total_goal": 0,
   "total_goal_achieved_notified": false,
   "real_earnings": {
