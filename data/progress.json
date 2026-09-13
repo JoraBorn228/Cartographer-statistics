@@ -1,6 +1,6 @@
 {
-  "points": 24813,
-  "level": 3195,
+  "points": 24983,
+  "level": 3224,
   "sprint_duration": 15,
   "break_duration": 3,
   "sprint_repeats": 3,
@@ -834,12 +834,12 @@
   "active_session": {
     "active": true,
     "started_at": 1789314247.8747354,
-    "points": 39,
+    "points": 209,
     "tab_times": {
       "Картограф": 1.4132778644561768,
       "—": 0.04302644729614258,
       "(7) ЛУЖА... Страшные истории на ночь. Страшилки на ночь. - YouTube": 0.5659980773925781,
-      "Бэкофис панорам": 100.26717948913574
+      "Бэкофис панорам": 711.1169152259827
     },
     "current_phase": "sprint",
     "current_sprint_index": 0,
@@ -847,7 +847,7 @@
     "sprint_finished": false,
     "phase_start": 1789314247.8747354,
     "current_tab": "Бэкофис панорам",
-    "last_tab_poll": 1789314350.171218,
+    "last_tab_poll": 1789314961.0239563,
     "recording": true,
     "paused": false,
     "pause_start": null,
