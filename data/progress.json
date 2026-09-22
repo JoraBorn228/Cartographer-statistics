@@ -834,8 +834,8 @@
       "tags": []
     }
   ],
-  "daily_goal": 0,
-  "goal_start_date": "2026-09-15",
+  "daily_goal": 10000,
+  "goal_start_date": "2026-09-22",
   "active_session": null,
   "total_goal": 0,
   "total_goal_achieved_notified": false,
@@ -882,7 +882,25 @@
       "mode": "from_approx",
       "income_source": "user",
       "created_at": 1788304565.7191925
+    },
+    {
+      "id": "1790109920.3612669",
+      "name": "123",
+      "target_amount": 90000.0,
+      "target_date": "2026-10-22",
+      "mode": "from_approx",
+      "income_source": "user",
+      "created_at": 1790109920.3612669
+    },
+    {
+      "id": "1790109959.0412676",
+      "name": "Пизда",
+      "target_amount": 40000.0,
+      "target_date": "2026-09-30",
+      "mode": "from_approx",
+      "income_source": "user",
+      "created_at": 1790109959.0412676
     }
   ],
-  "active_goal_id": "1788304565.7191925"
+  "active_goal_id": "1790109959.0412676"
 }
